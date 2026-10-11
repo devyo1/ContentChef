@@ -9,6 +9,8 @@ Ads <i>and</i> value posts: tips, lists, stats, text posts, photo posts. Built s
 
 ## Download
 
+**New to this? [Start with the beginner’s guide](QUICKSTART.md).** It explains what to download, where to click, how to connect ChatGPT, and how to save your first ad. You can also open **First time? Start here.** in the launcher.
+
 Grab the installer for your system from the **[Releases](../../releases)** page:
 
 | System | File |
@@ -17,7 +19,21 @@ Grab the installer for your system from the **[Releases](../../releases)** page:
 | macOS | `Content-Chef-x.y.z-mac-*.dmg` |
 | Linux | `Content-Chef-x.y.z-linux-*.AppImage` |
 
-Install, open the **Content Chef launcher**, and press **Open studio**. There's no terminal and nothing else to install. Your brands and exports live in **Documents/Content Chef**.
+Install, open the **Content Chef launcher**, and press **Open studio**. The studio installs like a normal app; connecting an AI assistant may need a separate one-time setup. Your brands and exports live in **Documents/Content Chef**.
+
+If the Releases page has no downloads yet, an installer has not been published. The green **Code** button downloads developer files, not an app you can open. Ask the person sharing Content Chef for an installer, or wait for a published release.
+
+### Quick start: your first ad
+
+1. **Open Content Chef**, then click **Open studio**.
+2. **Connect ChatGPT:** click **Settings → AI assistant**, choose **My ChatGPT account (via Codex)**, then **Sign in with ChatGPT**. Finish in your browser, return and click **Check again**. Already signed in? Skip this step. If you see **Codex not found**, follow the [one-time setup help](QUICKSTART.md#when-it-says-codex-not-found). Claude is available in the same menu.
+3. **Make your brand:** click the brand name at the top left, then **New brand… → From my website**. Enter your website and a sentence about what you want to promote. Click **Build my brand**, review the suggestions, then **Create brand & fine-tune**. No website? Choose **Start manually**.
+4. **Ask for an ad:** click **Ask ChatGPT** (or **Ask Claude**), type the example below and press Enter. Your assistant builds a design for you to review.
+5. **Save your picture:** in **Create**, find **Export**, choose **PNG (best)** and click the **Export** button. When it says **Served!**, click **Open folder**. Upload the picture to your social account yourself.
+
+> Make one Instagram feed ad for my brand, promoting our services to local business owners. Use a friendly headline and a “Learn more” button. Show it in the editor so I can review it.
+
+Change “our services” and “local business owners” to what you sell and who you want to reach. You can ask for changes in ordinary words, such as “Make the headline shorter.”
 
 The launcher checks GitHub Releases on startup and every four hours. Stable updates download in the background and update **both the launcher and studio** together. Choose **Restart to update** after closing the studio, or let the update install when you quit. If you're offline or a download fails, the installed version stays available. Your brands, exports, settings and Codex login are separate from the installation.
 
