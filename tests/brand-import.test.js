@@ -10,6 +10,7 @@ import { websiteUrl, isPublicAddress, publicAddresses, readWebsiteHtml, cssIdent
 import { execFileSync } from 'node:child_process';
 import { proposalToBrand, draftBrand, acceptBrandDraft } from '../src/brand-import.js';
 import { requestImages, visualMessage } from '../src/ai-images.js';
+import { readBrandProgress } from '../public/js/brand-progress.js';
 
 const proposal = {
   name: 'Example Studio', tagline: 'Built with care.', description: 'Web design services.', audience: 'Local business owners.', voice: 'Warm and direct.',
@@ -111,7 +112,9 @@ test('draft uses website evidence and brief, distinguishes source notes, and rej
 test('normal HTML sites are visually rendered, and supporting pages are bounded to the site', async () => {
   const html = `<h1>Studio</h1><p>${'A complete business website. '.repeat(20)}</p><a href="/about">About</a><a href="/services">Services</a><a href="/story">Story</a><a href="https://other.example/services">External</a><a href="/services?logout=1">Services</a>`;
   const calls = [];
+  const stages = [];
   const scan = await scanWebsite('example.com', {
+    onProgress: (event) => stages.push(event.stage),
     fetcher: async (url) => ({ url, type: 'text/html', body: Buffer.from(html) }),
     render: async (response) => { calls.push(response.url); return { html, screenshots: [{ label: 'Rendered view', type: 'image/jpeg', body: Buffer.from([255,216,255]) }], computed: { heading: { font: 'Instrument Serif' } } }; },
   });
@@ -119,6 +122,38 @@ test('normal HTML sites are visually rendered, and supporting pages are bounded 
   assert.equal(scan.images.length, 3);
   assert.equal(scan.evidence.pages.length, 2);
   assert.equal(scan.evidence.computed.heading.font, 'Instrument Serif');
+  assert.deepEqual(stages, ['reading', 'visuals', 'visuals', 'visuals', 'styles']);
+});
+
+test('brand progress waits for generation and validation, and never reaches review after a failure', async () => {
+  const stages = [];
+  const options = { settings: {}, onProgress: (event) => stages.push(event.stage), scan: async (_, { onProgress }) => {
+    onProgress({ stage: 'reading' });
+    return { evidence: { url: 'https://example.com/', colors: [], fonts: [] }, sources: [], warnings: [], logos: [] };
+  }, generate: async () => { assert.deepEqual(stages, ['reading', 'design']); return proposal; } };
+  await draftBrand({ url: 'example.com' }, options);
+  assert.deepEqual(stages, ['reading', 'design', 'review']);
+  stages.length = 0;
+  await assert.rejects(draftBrand({ url: 'example.com' }, { ...options, generate: async () => { throw new Error('Assistant disconnected'); } }), /disconnected/);
+  assert.deepEqual(stages, ['reading', 'design']);
+});
+
+test('brand progress streams handle split UTF-8, heartbeats, errors and interrupted responses', async () => {
+  const response = (events) => {
+    const bytes = new TextEncoder().encode(events);
+    return new Response(new ReadableStream({ start(controller) {
+      for (const byte of bytes) controller.enqueue(Uint8Array.of(byte));
+      controller.close();
+    } }));
+  };
+  const events = [];
+  const result = await readBrandProgress(response('{"type":"heartbeat"}\n{"type":"progress","stage":"design","detail":"Colours & café"}\n{"type":"result","result":{"draftId":"ready"}}'), (event) => events.push(event));
+  assert.deepEqual(result, { draftId: 'ready' });
+  assert.equal(events[0].detail, 'Colours & café');
+  await assert.rejects(readBrandProgress(response('{"type":"error","error":"Assistant disconnected"}\n'), () => {}), /disconnected/);
+  await assert.rejects(readBrandProgress(response('{"type":"heartbeat"}\n'), () => {}), /connection ended/i);
+  await assert.rejects(readBrandProgress(new Response('{"error":"Invalid website"}', { status: 400 }), () => {}), /Invalid website/);
+  await assert.rejects(readBrandProgress(new Response(new ReadableStream({ start(controller) { controller.error(new DOMException('Aborted', 'AbortError')); } })), () => {}), { name: 'AbortError' });
 });
 
 test('visual failures are disclosed and cancellation never becomes a partial-success scan', async () => {

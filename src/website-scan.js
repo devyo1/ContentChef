@@ -230,15 +230,17 @@ async function renderWebsite(response, signal) {
   } finally { signal?.removeEventListener('abort', abort); await context.close(); }
 }
 
-export async function scanWebsite(input, { fetcher = fetchWebsite, render = renderWebsite, signal } = {}) {
+export async function scanWebsite(input, { fetcher = fetchWebsite, render = renderWebsite, signal, onProgress = () => {} } = {}) {
   signal = signal ? AbortSignal.any([signal, AbortSignal.timeout(120000)]) : AbortSignal.timeout(120000);
   const url = websiteUrl(input).href;
+  onProgress({ stage: 'reading', detail: 'Reading your homepage and learning what your business does.' });
   const response = await fetcher(url, { signal });
   if (!['text/html', 'application/xhtml+xml'].includes(response.type)) throw new Error('That URL is not a web page. Enter your website’s home or about page.');
   let page = readWebsiteHtml(response.body.toString('utf8'), response.url);
   const warnings = [];
   let computed, visuals;
   const images = [], pages = [];
+  onProgress({ stage: 'visuals', detail: 'Capturing your website’s layout, imagery and visual personality.' });
   try {
     const rendered = await render(response, signal);
     page = readWebsiteHtml(rendered.html, response.url);
@@ -249,6 +251,7 @@ export async function scanWebsite(input, { fetcher = fetchWebsite, render = rend
   // Read a small number of business pages, not a site's entire portfolio or every client brand.
   for (const link of page.related) {
     signal.throwIfAborted();
+    onProgress({ stage: 'visuals', detail: `Studying supporting page ${pages.length + 1} of ${page.related.length}.` });
     try {
       const res = await fetcher(link.url, { signal });
       if (!['text/html', 'application/xhtml+xml'].includes(res.type) || new URL(res.url).origin !== new URL(page.url).origin) continue;
@@ -262,6 +265,7 @@ export async function scanWebsite(input, { fetcher = fetchWebsite, render = rend
   }
   if (page.text.length < 100 && !page.description) throw new Error('This page has too little readable content. Try a public about or services page, or create the brand manually.');
   if (page.text.length < 100) warnings.push('Limited page text was available; review the suggested business description and audience.');
+  onProgress({ stage: 'styles', detail: 'Gathering colours, typography and logo options from your website.' });
   const sheets = await Promise.all(page.sheets.map(async (url) => {
     try {
       const sheet = await fetcher(url, { maxBytes: 1_000_000, signal });

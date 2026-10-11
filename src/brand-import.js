@@ -78,16 +78,18 @@ function pruneDrafts() {
   while (drafts.size >= 20) drafts.delete(drafts.keys().next().value);
 }
 
-export async function draftBrand(input, { scan = scanWebsite, generate = writeWithProvider, settings, signal } = {}) {
+export async function draftBrand(input, { scan = scanWebsite, generate = writeWithProvider, settings, signal, onProgress = () => {} } = {}) {
   const { url, prompt } = Input.parse(input);
-  const scanned = await scan(url, { signal });
+  const scanned = await scan(url, { signal, onProgress });
   signal?.throwIfAborted();
+  onProgress({ stage: 'design', detail: 'Your assistant is developing the creative direction, colourways, fonts and brand voice.' });
   const { $schema, ...schema } = zodToJsonSchema(DesignProposal, { $refStrategy: 'none' });
   const proposal = DesignProposal.parse(await generate(settings ?? await getSettings(), { system: SYSTEM, schema, signal, images: scanned.images ?? [],
     text: JSON.stringify({ userBrief: prompt || 'Create a distinctive brand system inspired by the themes and ideas on this website, ready to make social content.', supportedFonts: FONT_LIBRARY.map((f) => f.family), websiteEvidence: scanned.evidence }),
   }));
   if (new Set(proposal.alternatePalettes.map((p) => p.name)).size !== 2) throw new Error('The assistant returned duplicate colourways. Try the brand design again.');
   signal?.throwIfAborted();
+  onProgress({ stage: 'review', detail: 'Checking readability and assembling your brand preview.' });
   const source = { url: scanned.evidence.url, prompt };
   const normalized = proposalToBrand(proposal, source);
   pruneDrafts();

@@ -23,6 +23,7 @@ import { draftBrand, acceptBrandDraft } from './brand-import.js';
 import { createBrand } from './core/brands.js';
 import { imageStatus, prepareBackground, generateBackground } from './background-images.js';
 import { connectHiggsfield, finishHiggsfield, disconnectHiggsfield, higgsfieldModels } from './higgsfield.js';
+import { listCarousels, loadCarousel, createCarousel, saveCarouselSlide, refineCarouselSlide, exportCarousel } from './carousels.js';
 
 const PORT = Number(process.env.PORT ?? 4545);
 const APP_VERSION = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8')).version;
@@ -69,12 +70,51 @@ app.get('/api/meta', api(async () => ({
 // ── Brands ──────────────────────────────────────────────────────────────────
 
 app.get('/api/brand/:id', api(async (req) => stripDir(await loadBrand(req.params.id))));
-app.post('/api/brand-import/draft', api(async (req, res) => {
+app.post('/api/brand-import/draft', async (req, res) => {
   const controller = new AbortController();
   res.on('close', () => controller.abort());
-  return draftBrand(req.body, { signal: controller.signal });
-}));
+  const streaming = req.get('accept') === 'application/x-ndjson';
+  const send = (event) => { if (!res.destroyed) res.write(`${JSON.stringify(event)}\n`); };
+  let heartbeat;
+  if (streaming) {
+    res.set({ 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' });
+    res.flushHeaders();
+    heartbeat = setInterval(() => send({ type: 'heartbeat' }), 15000);
+  }
+  try {
+    const result = await draftBrand(req.body, { signal: controller.signal,
+      onProgress: streaming ? (progress) => send({ type: 'progress', ...progress }) : undefined });
+    if (!res.destroyed) {
+      if (streaming) { send({ type: 'result', result }); res.end(); }
+      else res.json(result);
+    }
+  } catch (e) {
+    if (!res.destroyed) {
+      if (streaming) { send({ type: 'error', error: e.message }); res.end(); }
+      else res.status(400).json({ error: e.message });
+    }
+  } finally { clearInterval(heartbeat); }
+});
 app.post('/api/brand-import/create', api(async (req) => stripDir(await acceptBrandDraft(req.body))));
+app.get('/api/carousels', api((req) => listCarousels(req.query.brand)));
+app.get('/api/carousels/:id', api((req) => loadCarousel(req.params.id)));
+app.post('/api/carousels', api(async (req, res) => {
+  const controller = new AbortController(); res.on('close', () => controller.abort());
+  return createCarousel(req.body, { signal: controller.signal });
+}));
+app.put('/api/carousels/:id/slides/:slide', api((req) => saveCarouselSlide(req.params.id, req.params.slide, req.body)));
+app.post('/api/carousels/:id/slides/:slide/refine', api(async (req, res) => {
+  const controller = new AbortController(); res.on('close', () => controller.abort());
+  return refineCarouselSlide(req.params.id, req.params.slide, req.body, { signal: controller.signal });
+}));
+app.post('/api/carousels/:id/export', api(async (req) => {
+  await loadCarousel(req.params.id);
+  const job = startJob(async (onProgress) => {
+    const result = await exportCarousel(req.params.id, { generate, onProgress });
+    return { ...result, dir: path.relative(ROOT, result.dir), files: result.files.map((p) => ({ name: path.basename(p), url: toUrl(p) })) };
+  });
+  return { id: job.id };
+}));
 // Editor saves send the complete brand, so replace rather than merge (lets palettes be deleted).
 app.put('/api/brand/:id', api(async (req) => {
   const isNew = req.params.id === '_new';

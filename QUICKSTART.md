@@ -117,6 +117,15 @@ Check the wording, prices and contact details before using the ad. Prefer to mak
 
 To keep a design to work on later, click **Save for later** in the Export panel, give it a campaign name (a folder-like label for related ads), then click **Save**. Find it under **Saved & exports**. You can also reopen a recent export from the **Dashboard** using **Edit in builder**.
 
+## Make a swipe-through carousel
+
+1. Click **Carousel** at the top of the studio.
+2. Describe the story or advice you want to share. Choose **2–20 slides**; this total includes the opening slide and final call to action.
+3. Enter the final action, such as **Book your shoot**, and click **Build carousel**.
+4. Click any numbered slide to edit its words or appearance. To ask AI for a change, type under **Refine just this slide**, then click **Rewrite slide**. Check the preview and choose **Apply suggestion** or **Discard**.
+5. Click **Save slide** to keep your edits. Moving to another slide also saves your changes. Your carousels are available in the **Saved carousels** dropdown on this page.
+6. Click **Export all slides**. Open the folder or download the pictures, then upload `slide-01.png`, `slide-02.png` and the rest in that order when creating your social post.
+
 ## Next time you open Content Chef
 
 Open the launcher and click **Open studio**. Choose your brand and ask for your next ad. You don’t need to repeat brand setup or sign in again unless the connection asks you to.

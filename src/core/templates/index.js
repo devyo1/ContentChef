@@ -22,6 +22,7 @@ import event from './event.js';
 import chat from './chat.js';
 import poll from './poll.js';
 import carousel from './carousel.js';
+import carouselSlide from './carousel-slide.js';
 import menu from './menu.js';
 import ticket from './ticket.js';
 import newspaper from './newspaper.js';
@@ -51,7 +52,7 @@ const DEFAULT_CATEGORY = {
 //   { id, name, description, category?, fields, preferBg?, render(ctx) → { css, body } }
 // and register it here. See base.js for shared helpers and CSS classes.
 export const TEMPLATES = Object.fromEntries(
-  [headline, insight, list, stat, carousel, newspaper, textpost, compare, notes, chat, poll, photoStory, photoCard, polaroid, cover, spotlight, glass, lockscreen, stack, marker, split, frame, offer, event, ticket, menu, quote, minimal]
+  [headline, insight, list, stat, carousel, carouselSlide, newspaper, textpost, compare, notes, chat, poll, photoStory, photoCard, polaroid, cover, spotlight, glass, lockscreen, stack, marker, split, frame, offer, event, ticket, menu, quote, minimal]
     .map((t) => [t.id, { ...t, category: t.category ?? DEFAULT_CATEGORY[t.id] ?? 'promo', textOnPhoto: t.textOnPhoto ?? TEXT_ON_PHOTO.has(t.id) }]),
 );
 

@@ -1,6 +1,8 @@
 import { html, useState, useEffect, useRef, api, Modal, Field } from './lib.js';
 import { Icon } from './icons.js';
 import { assistantName, assistantReady } from './assistant.js';
+import { readBrandProgress } from './brand-progress.js';
+import { BrandBuildProgress } from './brand-build-progress.js';
 
 export function NewBrandModal({ settings, onClose, onCreated }) {
   const [mode, setMode] = useState('website');
@@ -12,6 +14,8 @@ export function NewBrandModal({ settings, onClose, onCreated }) {
   const [logo, setLogo] = useState(-1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState(null);
+  const [cancelled, setCancelled] = useState(false);
   const request = useRef(null);
   useEffect(() => () => request.current?.abort(), []);
   useEffect(() => {
@@ -27,16 +31,19 @@ export function NewBrandModal({ settings, onClose, onCreated }) {
   const patch = (p) => setProposal((current) => ({ ...current, ...p }));
   const generate = async (e) => {
     e.preventDefault();
-    setBusy(true); setError('');
+    if (busy) return;
+    setBusy(true); setError(''); setCancelled(false);
+    setProgress({ stage: 'reading', detail: 'Connecting to your website…' });
     request.current = new AbortController();
     try {
-      const r = await api('POST', '/api/brand-import/draft', { url: url.trim(), prompt: prompt.trim() }, { signal: request.current.signal });
+      const response = await fetch('/api/brand-import/draft', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' }, body: JSON.stringify({ url: url.trim(), prompt: prompt.trim() }), signal: request.current.signal });
+      const r = await readBrandProgress(response, setProgress);
       setDraft(r);
       // The preview uses the same validated font and palette values that will be saved.
       setProposal({ ...r.proposal, palette: r.brand.palettes.website, displayFont: r.brand.fonts.display.family, bodyFont: r.brand.fonts.body.family });
       setLogo(-1);
-    } catch (e) { if (e.name !== 'AbortError') setError(e.message); }
-    finally { setBusy(false); }
+    } catch (e) { if (e.name !== 'AbortError') setError(e.message); else setCancelled(true); }
+    finally { setBusy(false); setProgress(null); }
   };
   const save = async (e) => {
     e?.preventDefault();
@@ -66,8 +73,9 @@ export function NewBrandModal({ settings, onClose, onCreated }) {
             <//>
             <div class="brand-import-includes"><span>Visual website study</span><span>Creative direction</span><span>Palettes & typography</span><span>Imagery & voice</span></div>
             ${!ready && html`<p class="brand-import-error">Connect your assistant in Settings → AI assistant first, or start manually.</p>`}
-            ${busy && html`<p class="row small" role="status"><span class="spin"></span>Studying the website and developing your brand with ${assistantName(settings)}. This can take a few minutes…</p>`}
-            <div class="row end"><button type="submit" class="btn primary" disabled=${busy || !url.trim() || !ready}><${Icon} name="sparkles" size=${15} /> ${busy ? 'Building your brand…' : 'Build my brand'}</button></div>
+            ${progress && html`<${BrandBuildProgress} progress=${progress} onCancel=${() => request.current?.abort()} />`}
+            ${cancelled && html`<p class="small muted" role="status">Build cancelled. Your website and brief are ready whenever you want to try again.</p>`}
+            ${!progress && html`<div class="row end"><button type="submit" class="btn primary" disabled=${busy || !url.trim() || !ready}><${Icon} name="sparkles" size=${15} />Build my brand</button></div>`}
             <p class="small muted">Reads the public page and up to two related business pages. Screenshots, relevant website content and your brief are sent to your connected AI. Review the direction before saving.</p>
           </form>` : html`
           <form onSubmit=${save}>
