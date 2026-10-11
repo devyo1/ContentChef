@@ -4,6 +4,7 @@ import { BrandsPage } from './brand-editor.js';
 import { SavedPage } from './saved.js';
 import { DashboardPage } from './dashboard.js';
 import { VideoPage } from './video.js';
+import { AiActivity } from './activity.js';
 import { SettingsPage } from './settings-page.js';
 import { ChatWidget } from './chat-ui.js';
 import { Icon } from './icons.js';
@@ -100,11 +101,17 @@ function App() {
     es.onmessage = async (ev) => {
       const e = JSON.parse(ev.data);
       if (e.type === 'meta') reload();
+      if (e.type === 'activity') dispatchEvent(new Event('chef:activity'));
       if (e.type === 'workspace' && e.source !== CLIENT_ID) {
         const ws = await api('GET', '/api/workspace');
         setWorkspace(ws);
         if (ws.brand && ws.brand !== brandRef.current) pickBrand(ws.brand);
-        if (['claude', 'assistant'].includes(ws.source)) toast('✦ Assistant updated your design');
+        if (['claude', 'assistant'].includes(ws.source)) {
+          // An AI changed the design: bring the builder up so you can watch, in the view it asked for.
+          setTab('create');
+          if (ws.view) { store.set('stage.view', ws.view); dispatchEvent(new CustomEvent('chef:view', { detail: ws.view })); }
+          toast(`✦ ${ws.actor ?? 'Assistant'} updated your design`);
+        }
       }
     };
     const onFocus = () => reload();
@@ -136,6 +143,7 @@ function App() {
             ${NAV.map(([id, ico, label]) => html`<button class=${tab === id ? 'on' : ''} onClick=${() => setTab(id)}><${Icon} name=${ico} size=${15} />${label}</button>`)}
           </nav>
           <div class="top-actions">
+            <${AiActivity} />
             <button class="icon-btn" title=${dark ? 'Light mode' : 'Dark mode'} onClick=${() => saveSettings({ theme: dark ? 'light' : 'dark' })}><${Icon} name=${dark ? 'sun' : 'moon'} /></button>
             <button class="ask-btn" onClick=${() => dispatchEvent(new Event('chef:chat'))}><span class="spark"><${Icon} name="sparkles" size=${13} stroke=${2} /></span>Ask ${assistantName(settings)}</button>
           </div>

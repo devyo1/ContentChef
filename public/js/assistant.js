@@ -14,6 +14,6 @@ export function assistantHint(settings) {
     : 'Install Codex CLI, then sign in with ChatGPT in Settings.';
   if (assistantProvider(settings) === 'api') return 'Add your Anthropic API key in Settings to chat with Claude here.';
   return settings?.claudeCode?.installed
-    ? 'Sign in with your Claude account in Settings to chat here.'
+    ? 'Your Claude sign-in is missing or expired. Sign in with your Claude account to chat here.'
     : 'Install Claude Code, or choose another connection in Settings.';
 }

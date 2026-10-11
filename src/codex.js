@@ -113,6 +113,7 @@ export function codexArgs({ settings, session, schemaFile, instructions = SYSTEM
     config['mcp_servers.content-chef.command'] = mcp.command;
     config['mcp_servers.content-chef.args'] = mcp.args;
     for (const [k, v] of Object.entries(mcp.env)) config[`mcp_servers.content-chef.env.${k}`] = v;
+    config['mcp_servers.content-chef.env.CONTENT_CHEF_ACTOR'] = 'ChatGPT (chat)';
     config['mcp_servers.content-chef.required'] = true;
     // The in-app assistant is authorized to use this app's tools, as with Claude Code.
     config['mcp_servers.content-chef.default_tools_approval_mode'] = 'approve';

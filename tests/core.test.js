@@ -14,6 +14,7 @@ import { sanitizeHtml, sanitizeCss, normalizeSpec } from '../src/core/templates/
 import { splitDate } from '../src/core/templates/event.js';
 import { chatLines } from '../src/core/templates/chat.js';
 import { menuItem } from '../src/core/templates/menu.js';
+import { clientLabel } from '../src/core/activity.js';
 
 test('generated palettes are readable in every mood', () => {
   for (const mood of Object.keys(MOODS)) {
@@ -131,4 +132,12 @@ test('event dates, chat lines and menu prices parse the way people type them', (
   assert.deepEqual(menuItem('Oat flat white: £3.20'), { name: 'Oat flat white', price: '£3.20' });
   assert.deepEqual(menuItem('Croissant — 2.80'), { name: 'Croissant', price: '2.80' });
   assert.deepEqual(menuItem('Ask about specials'), { name: 'Ask about specials', price: '' });
+});
+
+test('activity feed names the connected AI', () => {
+  assert.equal(clientLabel('claude-ai'), 'Claude');
+  assert.equal(clientLabel('Claude Code'), 'Claude');
+  assert.equal(clientLabel('openai-mcp'), 'ChatGPT');
+  assert.equal(clientLabel('my-custom-agent'), 'My Custom Agent');
+  assert.equal(clientLabel(undefined), 'AI');
 });

@@ -6,7 +6,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { jsonSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/json-schema';
 import { z } from 'zod';
 import { loadBrand, getSettings, getTemplate, DATA_DIR, PLATFORMS } from './core/index.js';
-import { findClaude, childEnv } from './claude-code.js';
+import { findClaude, childEnv, AUTH_ERROR, SIGN_IN_MESSAGE } from './claude-code.js';
 import { writeWithCodex } from './codex.js';
 
 export function writeWithProvider(settings, req) {
@@ -149,7 +149,7 @@ async function viaClaudeCode(settings, req) {
   const reply = String(result?.result ?? '');
   if (result?.is_error || code !== 0) {
     const msg = reply || stderr.trim().slice(-300) || `Claude Code exited (${code})`;
-    throw new Error(/not logged in|\/login/i.test(msg) ? 'Claude Code is not signed in. Open Settings → AI assistant and press "Sign in with Claude".' : msg);
+    throw new Error(AUTH_ERROR.test(msg) ? SIGN_IN_MESSAGE : msg);
   }
   const a = reply.indexOf('{');
   const b = reply.lastIndexOf('}');

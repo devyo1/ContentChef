@@ -49,6 +49,10 @@ Install, open, done. There's no terminal and nothing else to install. Your brand
 
 Content Chef is an **MCP connector**, so your assistant can see your design (including a rendered image), change it live in your editor, create templates, generate palettes, write copy and export.
 
+- **You stay in the loop.** When you ask an AI for ads, it builds them in your open builder (copy, versions, templates, colours, sizes, Canvas view) so you watch it happen and tweak the result. It only renders files on its own when you explicitly ask for an export or background work.
+- **See what it's doing.** The **AI activity** pill in the top bar shows which AI is working and what it's doing, with a feed of recent actions.
+- **Reopen any export.** Exports remember the design that made them: on the Dashboard press **Edit in builder** to reuse or change one.
+
 - **ChatGPT account:** choose **Settings → AI assistant → My ChatGPT account (via Codex)**. Install a current [Codex CLI](https://developers.openai.com/codex/cli) (`npm install -g @openai/codex`) if needed, click **Sign in with ChatGPT**, finish in your browser, then **Check again**. If Codex is already signed in with ChatGPT, it works immediately. Press **Ask ChatGPT** to start. Copywriting and captions use the same connection, with no API key required.
 - **Claude:** select your Claude account through Claude Code, or an Anthropic API key, in the same settings. Existing installations keep their selected Claude connection.
 - **From Codex, Claude Desktop or Claude Code:** **Settings → Use Content Chef from other AI apps** shows the exact command or config for your machine.

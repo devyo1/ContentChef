@@ -15,6 +15,7 @@ test('Codex chat and resume isolate config while registering only Content Chef',
     assert.ok(args.includes('forced_login_method="chatgpt"'));
     assert.ok(args.includes('mcp_servers.content-chef.required=true'));
     assert.ok(args.includes('mcp_servers.content-chef.default_tools_approval_mode="approve"'));
+    assert.ok(args.includes('mcp_servers.content-chef.env.CONTENT_CHEF_ACTOR="ChatGPT (chat)"'));
     assert.ok(!args.includes('--dangerously-bypass-approvals-and-sandbox'));
     if (session) assert.deepEqual(args.slice(-3), ['resume', session, '-']);
     const command = args.find((a) => a.startsWith('mcp_servers.content-chef.command='));

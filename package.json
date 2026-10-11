@@ -15,7 +15,7 @@
     "brands": "node src/cli.js brands",
     "formats": "node src/cli.js formats",
     "setup": "npx playwright install chromium",
-    "test": "node --test tests/core.test.js tests/codex.test.js tests/settings.test.js tests/brand-import.test.js",
+    "test": "node --test tests/core.test.js tests/codex.test.js tests/settings.test.js tests/brand-import.test.js tests/mcp.test.js",
     "desktop": "electron .",
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --win --publish never",
