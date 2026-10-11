@@ -1,0 +1,107 @@
+{
+  "name": "content-chef",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Brand-aware content studio: design ads and value posts once, export every size as PNG/JPG/MP4. Desktop app, CLI, and an MCP connector so Claude can drive it.",
+  "type": "module",
+  "bin": {
+    "content-chef": "src/cli.js",
+    "content-chef-mcp": "src/mcp.js"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "mcp": "node src/mcp.js",
+    "render": "node src/cli.js render",
+    "brands": "node src/cli.js brands",
+    "formats": "node src/cli.js formats",
+    "setup": "npx playwright install chromium",
+    "test": "node --test tests/core.test.js",
+    "desktop": "electron .",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^4.21.2",
+    "ffmpeg-static": "^5.3.0",
+    "htm": "^3.1.1",
+    "playwright": "^1.49.1",
+    "preact": "^11.0.1",
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "license": "MIT",
+  "keywords": [
+    "social-media",
+    "content",
+    "ads",
+    "design",
+    "templates",
+    "mcp",
+    "claude",
+    "video",
+    "brand"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3"
+  },
+  "main": "electron/main.js",
+  "author": "Content Chef contributors",
+  "build": {
+    "appId": "app.contentchef.desktop",
+    "productName": "Content Chef",
+    "artifactName": "Content-Chef-${version}-${os}-${arch}.${ext}",
+    "asar": false,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "electron/**",
+      "src/**",
+      "public/**",
+      "examples/**",
+      "build/icon.png",
+      "package.json",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Content Chef"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.graphics-design",
+      "icon": "build/icon.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Graphics",
+      "icon": "build/icon.png"
+    }
+  }
+}

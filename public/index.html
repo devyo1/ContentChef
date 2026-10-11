@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Content Chef</title>
+  <link rel="icon" type="image/svg+xml" href="logo.svg">
+  <script>
+    // Apply the saved theme before first paint to avoid a light flash in dark mode.
+    try { const t = localStorage.getItem("adgen.theme") || "system"; document.documentElement.dataset.theme = t === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : t; } catch {}
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="app.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "preact": "/vendor/preact/dist/preact.mjs",
+        "preact/hooks": "/vendor/preact/hooks/dist/hooks.mjs",
+        "htm": "/vendor/htm/dist/htm.mjs"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app"><div class="loading-screen">Loading…</div></div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

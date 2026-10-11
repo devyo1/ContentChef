@@ -1,0 +1,20 @@
+/node_modules/
+/dist/
+
+# Your work (the app creates these; examples/ holds the shipped demo content)
+/brands/
+/catalog/
+/output/
+/data/
+/templates/
+
+# Local tooling
+.claude/
+*.log
+
+# Machine / test leftovers
+NVIDIA Corporation/
+/*.jpg
+/*.png
+.DS_Store
+Thumbs.db

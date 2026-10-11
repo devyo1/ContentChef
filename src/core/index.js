@@ -1,0 +1,21 @@
+// Public API of the ad generator core, shared by the CLI, web server and MCP server.
+export * from './paths.js';
+export * from './formats.js';
+export * from './brands.js';
+export * from './compose.js';
+export * from './renderer.js';
+export * from './captions.js';
+export * from './generate.js';
+export * from './catalog.js';
+export { TEMPLATES, CATEGORIES, getTemplate, describeTemplates, allTemplates } from './templates/index.js';
+export { TOKENS as TEMPLATE_TOKENS, CUSTOM_FIELDS, saveCustomTemplate, readCustomSpec, deleteCustomTemplate } from './templates/custom.js';
+export * from './sheet.js';
+export * from './palettes.js';
+export * from './fonts.js';
+export * from './media.js';
+export { ANIMATIONS, BG_STYLES } from './templates/base.js';
+export * from './workspace.js';
+export * from './settings.js';
+export { EFFECTS, STYLE_ROLES, CTA_FX, LOOP_PERIODS } from './templates/base.js';
+export * from './launch.js';
+export { DECOR_PRESETS, sanitizeSvg } from './templates/decor.js';

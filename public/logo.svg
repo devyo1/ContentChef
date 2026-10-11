@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Content Chef">
+  <defs>
+    <linearGradient id="cc-pan" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF7A30"/>
+      <stop offset="1" stop-color="#C2410C"/>
+    </linearGradient>
+    <linearGradient id="cc-post" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE2C7"/>
+      <stop offset="1" stop-color="#FFB074"/>
+    </linearGradient>
+  </defs>
+  <!-- flip trail -->
+  <path d="M15.5 37.5C11 28 15 17.5 24 13" fill="none" stroke="#FF8A3D" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="0.1 5.2" opacity=".75"/>
+  <!-- the post, mid-flip -->
+  <g transform="rotate(24 33 15)">
+    <rect x="24" y="6.5" width="18" height="16" rx="4.2" fill="url(#cc-post)"/>
+    <rect x="27.6" y="10.8" width="10.5" height="2.8" rx="1.4" fill="#E5531A"/>
+    <rect x="27.6" y="16" width="6.6" height="2.8" rx="1.4" fill="#E5531A" opacity=".75"/>
+  </g>
+  <!-- the pan, tilted as it flips -->
+  <g transform="rotate(-14 30 46)">
+    <path d="M42 47.5L61 43" stroke="url(#cc-pan)" stroke-width="5.4" stroke-linecap="round"/>
+    <path d="M5 45.5h38c0 7.8-5.8 12.5-13.5 12.5h-11C10.8 58 5 53.3 5 45.5z" fill="url(#cc-pan)"/>
+    <ellipse cx="24" cy="45.5" rx="19" ry="3.6" fill="#FFA060"/>
+    <ellipse cx="24" cy="45.8" rx="15.5" ry="2.2" fill="#B8380A"/>
+  </g>
+</svg>

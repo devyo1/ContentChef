@@ -1,0 +1,25 @@
+{
+  "name": "PULSE",
+  "tagline": "Train loud.",
+  "handle": "@pulsefitness",
+  "fonts": {
+    "display": { "family": "Anton", "weight": 400, "google": "Anton" },
+    "body": { "family": "Space Grotesk", "weight": 500, "google": "Space Grotesk:wght@400;500;700" }
+  },
+  "palettes": {
+    "volt":   { "bg": "#0B0B0C", "fg": "#FFFFFF", "accent": "#D4FF3A", "muted": "#8C8C8C", "ctaText": "#0B0B0C" },
+    "white":  { "bg": "#FFFFFF", "fg": "#0B0B0C", "accent": "#FF3B1F", "muted": "#6B6B6B", "ctaText": "#FFFFFF" },
+    "blaze":  { "bg": "#FF3B1F", "fg": "#0B0B0C", "accent": "#FFFFFF", "muted": "#3A0E06", "ctaBg": "#0B0B0C", "ctaText": "#FFFFFF" },
+    "aurora": { "bg": "#0E0B1F", "fg": "#FFFFFF", "accent": "#FFFFFF", "muted": "#D7D3F5", "ctaBg": "#FFFFFF", "ctaText": "#0E0B1F", "gradient": ["#5B3CFF", "#FF4FA3", "#22D3EE", "#0E0B1F"] }
+  },
+  "logo": null,
+  "style": { "headlineCase": "upper", "headlineTracking": "0em", "headlineLeading": 0.92, "radius": 0, "overlay": 0.35, "grain": false, "align": "left" },
+  "defaults": { "templates": ["headline", "list"], "formats": "social", "palettes": ["volt", "white"] },
+  "captions": {
+    "voice": "High energy, direct, imperative. Short punchy lines. No fluff, no wellness clichés.",
+    "hashtags": ["PulseFitness", "TrainLoud", "Strength", "GymLife"],
+    "signoff": "",
+    "link": "https://pulse.fit",
+    "emoji": false
+  }
+}

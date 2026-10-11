@@ -1,0 +1,35 @@
+# Builds the desktop installers on every version tag (v1.2.3) and attaches them to a draft
+# GitHub Release. Review the draft, then publish it.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Build installer
+        # The repository comes from the Actions environment; releases are created as drafts.
+        run: npx electron-builder --publish always -c.publish.provider=github -c.publish.releaseType=draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Unsigned builds by default. Add signing secrets (CSC_LINK / CSC_KEY_PASSWORD, Apple
+          # notarization) when you have certificates; see the electron-builder code-signing docs.
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'

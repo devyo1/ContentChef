@@ -1,0 +1,316 @@
+#!/usr/bin/env node
+// Local web editor: live previews, single + bulk ad creation, brand editing, export jobs with progress.
+import fs from 'node:fs/promises';
+import { watch } from 'node:fs';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import express from 'express';
+import {
+  listBrands, loadBrand, saveBrand, saveAsset, describeTemplates, FORMATS, FORMAT_GROUPS, PLATFORMS,
+  ANIMATIONS, BG_STYLES, EFFECTS, STYLE_ROLES, CATEGORIES, PALETTE_LIBRARY, FONT_LIBRARY, googleSpec, composeAd, generate, generateBatch,
+  buildCaptions, listCatalogs, loadCatalog, saveCatalog, upsertItem, removeItem, renderCatalog,
+  closeBrowser, getWorkspace, setWorkspace, getSettings, saveSettings, publicSettings,
+  BRANDS_DIR, OUTPUT_DIR, CATALOG_DIR, DATA_DIR, TEMPLATES_DIR, ROOT, HOME, ensureWorkspace, mcpLaunch,
+  deleteAsset, assetPath, gifToMp4, CTA_FX, LOOP_PERIODS, DECOR_PRESETS, trimVideo, VIDEO_ASPECTS,
+} from './core/index.js';
+import { runChat, resetChat, chatErrorMessage } from './chat.js';
+import { writeCopy, writeCaptions } from './copywriter.js';
+import { claudeCodeStatus, startClaudeLogin, runClaudeCodeChat, resetClaudeCodeChat } from './claude-code.js';
+
+const PORT = Number(process.env.PORT ?? 4545);
+const app = express();
+app.use(express.json({ limit: '20mb' }));
+app.use(express.static(path.join(ROOT, 'public')));
+app.use('/vendor/preact', express.static(path.join(ROOT, 'node_modules/preact')));
+app.use('/vendor/htm', express.static(path.join(ROOT, 'node_modules/htm')));
+app.use('/brands', express.static(BRANDS_DIR));
+app.use('/output', express.static(OUTPUT_DIR));
+
+const api = (fn) => async (req, res) => {
+  try { res.json(await fn(req, res)); } catch (e) { res.status(400).json({ error: e.message }); }
+};
+const toUrl = (p) => `/output/${path.relative(OUTPUT_DIR, p).split(path.sep).map(encodeURIComponent).join('/')}`;
+const withUrls = (m) => ({ ...m, folder: path.relative(ROOT, m.dir), files: m.files.map((f) => ({ ...f, url: toUrl(f.path) })) });
+const stripDir = ({ dir, ...b }) => b;
+
+// ── Metadata ────────────────────────────────────────────────────────────────
+
+app.get('/api/meta', api(async () => ({
+  brands: (await listBrands()).map(stripDir),
+  templates: describeTemplates(),
+  categories: CATEGORIES,
+  formats: FORMATS,
+  groups: FORMAT_GROUPS,
+  platforms: PLATFORMS,
+  animations: ANIMATIONS,
+  effects: EFFECTS,
+  ctaFx: CTA_FX,
+  decorPresets: DECOR_PRESETS,
+  loopPeriods: LOOP_PERIODS,
+  styleRoles: STYLE_ROLES,
+  bgStyles: BG_STYLES,
+  paletteLibrary: PALETTE_LIBRARY,
+  fonts: FONT_LIBRARY.map((f) => ({ ...f, google: googleSpec(f.family) })),
+  root: ROOT,
+  home: HOME,
+  mcp: mcpLaunch(),
+  desktop: !!process.versions.electron,
+})));
+
+// ── Brands ──────────────────────────────────────────────────────────────────
+
+app.get('/api/brand/:id', api(async (req) => stripDir(await loadBrand(req.params.id))));
+// Editor saves send the complete brand, so replace rather than merge (lets palettes be deleted).
+app.put('/api/brand/:id', api(async (req) => {
+  const isNew = req.params.id === '_new';
+  const { version, ...body } = req.body;
+  return stripDir(await saveBrand(isNew ? undefined : req.params.id, body, { replace: !isNew, expectVersion: version }));
+}));
+
+app.post('/api/upload', express.raw({ type: '*/*', limit: '500mb' }), api(async (req) => {
+  const ref = await saveAsset(req.query.brand, req.query.name, req.body);
+  // Animated GIFs become MP4s so they play as background video (frame-exact in exports).
+  if (/\.gif$/i.test(ref) && req.query.keepGif !== '1') {
+    const b = await loadBrand(req.query.brand);
+    const gif = assetPath(b, ref);
+    try {
+      await gifToMp4(gif);
+      await fs.rm(gif, { force: true });
+      return { ref: ref.replace(/\.gif$/i, '.mp4') };
+    } catch { /* a still GIF or an odd file: keep it as an image */ }
+  }
+  return { ref };
+}));
+
+app.delete('/api/brand/:id/asset', api(async (req) => ({ removed: await deleteAsset(req.params.id, req.query.ref) })));
+
+// ── Preview + captions ──────────────────────────────────────────────────────
+
+app.post('/api/preview', async (req, res) => {
+  try {
+    let { brand, brandId, ...rest } = req.body;
+    // The brand editor previews unsaved edits by sending the whole brand object.
+    if (brand && typeof brand === 'object') {
+      const base = await loadBrand(brandId);
+      brand = { ...base, ...brand, id: base.id, dir: base.dir, assets: base.assets };
+    }
+    res.type('html').send(await composeAd({ ...rest, brand, assets: 'http' }));
+  } catch (e) {
+    res.status(400).type('html').send(`<body style="font:15px system-ui;padding:24px;color:#c33;background:#fff">${e.message.replace(/</g, '&lt;')}</body>`);
+  }
+});
+
+app.post('/api/captions', api(async (req) => buildCaptions(await loadBrand(req.body.brand), req.body.content, req.body.platforms)));
+
+// ── Export jobs (run in the background; the page polls for progress) ────────
+
+const jobs = new Map();
+
+function startJob(work) {
+  // recent: the last few finished stills, so the editor can show work coming together while it renders.
+  const job = { id: randomUUID(), status: 'running', done: 0, total: 0, current: '', recent: [], startedAt: Date.now(), result: null, error: null };
+  jobs.set(job.id, job);
+  const onProgress = (done, total, j) => {
+    Object.assign(job, { done, total, current: `${j.ad ? `${j.ad} · ` : ''}${j.file}` });
+    if (j.kind === 'image' && j.path) job.recent = [...job.recent, toUrl(j.path)].slice(-10);
+  };
+  work(onProgress)
+    .then((result) => Object.assign(job, { status: 'done', result, finishedAt: Date.now() }))
+    .catch((e) => Object.assign(job, { status: 'error', error: e.message, finishedAt: Date.now() }));
+  return job;
+}
+
+app.post('/api/jobs', api(async (req) => {
+  const { mode, brand, campaign, content, variants, rows, templates, palettes, formats, scale, type, video, gif, still, id } = req.body;
+  const common = { brand, campaign: campaign || 'my-campaign', templates, palettes, formats, scale: scale || undefined, type, video, gif, still: still !== false };
+  const job = startJob(async (onProgress) => {
+    if (mode === 'bulk') {
+      const r = await generateBatch({ ...common, rows, shared: content, onProgress });
+      return { dir: path.relative(ROOT, r.dir), absDir: r.dir, csv: toUrl(r.csv), total: r.total, ads: r.manifests.map(withUrls) };
+    }
+    const m = await generate({ ...common, id, content, variants, onProgress });
+    return { dir: path.relative(ROOT, m.dir), absDir: m.dir, total: m.files.length, ads: [withUrls(m)] };
+  });
+  return { id: job.id };
+}));
+
+// Video mode: trim / crop / speed / mute a brand clip into output/<brand>/videos (optionally also
+// saved back to the brand's media so it can be used as a background).
+app.post('/api/video/trim', api(async (req) => {
+  const { brand: brandId, ref, name, start, end, aspect, focusX, mute, speed, saveToBrand } = req.body;
+  const b = await loadBrand(brandId);
+  const src = assetPath(b, ref);
+  const base = `${slugifyName(name || path.basename(ref).replace(/\.[^.]+$/, ''))}-${aspect && aspect !== 'original' ? aspect.replace(':', 'x') : 'cut'}`;
+  const dir = path.join(OUTPUT_DIR, b.id, 'videos');
+  const job = startJob(async (onProgress) => {
+    await fs.mkdir(dir, { recursive: true });
+    let out = path.join(dir, `${base}.mp4`);
+    for (let n = 2; await fs.access(out).then(() => true, () => false); n++) out = path.join(dir, `${base}-${n}.mp4`);
+    await trimVideo(src, out, { start, end, aspect, focusX, mute, speed });
+    onProgress(1, 1, { file: path.basename(out), kind: 'video', path: out });
+    let assetRef = null;
+    if (saveToBrand) assetRef = await saveAsset(b.id, path.basename(out), await fs.readFile(out));
+    return {
+      dir: path.relative(ROOT, dir), absDir: dir, total: 1, assetRef,
+      ads: [{ id: 'videos', files: [{ file: path.basename(out), url: toUrl(out), kind: 'video', format: aspect || 'original' }] }],
+    };
+  });
+  return { id: job.id };
+}));
+const slugifyName = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'clip';
+
+app.get('/api/jobs/:id', api(async (req) => {
+  const job = jobs.get(req.params.id);
+  if (!job) throw new Error('No such job');
+  return job;
+}));
+
+// Open an output folder in the OS file manager (only folders inside output/).
+app.post('/api/open', api(async (req) => {
+  const target = path.resolve(ROOT, req.body.path);
+  if (target !== OUTPUT_DIR && !target.startsWith(OUTPUT_DIR + path.sep)) throw new Error('Can only open folders inside output/');
+  await fs.mkdir(target, { recursive: true });
+  const cmd = process.platform === 'win32' ? 'explorer' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+  spawn(cmd, [target], { detached: true, stdio: 'ignore' }).unref();
+  return { ok: true };
+}));
+
+// Recent export folders (campaigns) with a preview image each.
+app.get('/api/exports', api(async () => {
+  const out = [];
+  let brands = [];
+  try { brands = await fs.readdir(OUTPUT_DIR, { withFileTypes: true }); } catch { return []; }
+  for (const b of brands.filter((d) => d.isDirectory())) {
+    const bdir = path.join(OUTPUT_DIR, b.name);
+    for (const c of (await fs.readdir(bdir, { withFileTypes: true })).filter((d) => d.isDirectory())) {
+      const cdir = path.join(bdir, c.name);
+      const ads = (await fs.readdir(cdir, { withFileTypes: true })).filter((d) => d.isDirectory());
+      let thumb = null;
+      let files = 0;
+      for (const a of ads) {
+        try {
+          const m = JSON.parse(await fs.readFile(path.join(cdir, a.name, 'manifest.json'), 'utf8'));
+          files += m.files.length;
+          thumb ??= m.files.find((f) => f.kind !== 'video')?.path;
+        } catch { /* not an ad folder */ }
+      }
+      const stat = await fs.stat(cdir);
+      let csv = null;
+      try { await fs.access(path.join(cdir, 'campaign.csv')); csv = toUrl(path.join(cdir, 'campaign.csv')); } catch { /* single-ad export */ }
+      out.push({ brand: b.name, campaign: c.name, dir: path.relative(ROOT, cdir), ads: ads.length, files, thumb: thumb && toUrl(thumb), csv, modified: stat.mtimeMs });
+    }
+  }
+  return out.sort((a, b) => b.modified - a.modified);
+}));
+
+// ── Saved campaigns (catalogs) ──────────────────────────────────────────────
+
+app.get('/api/catalogs', api(() => listCatalogs()));
+app.get('/api/catalog/:name', api(async (req) => { const { file, ...c } = await loadCatalog(req.params.name); return c; }));
+app.put('/api/catalog/:name', api(async (req) => ({ file: await saveCatalog(req.params.name, req.body) })));
+app.post('/api/catalog/:name/item', api((req) => upsertItem(req.params.name, req.body.item, req.body)));
+app.delete('/api/catalog/:name/item/:id', api(async (req) => { await removeItem(req.params.name, req.params.id); return { ok: true }; }));
+app.post('/api/catalog/:name/render', api(async (req) => {
+  const job = startJob(async (onProgress) => {
+    const ms = await renderCatalog(req.params.name, { only: req.body.only, onProgress: (id, d, t, j) => onProgress(d, t, { ...j, ad: id }) });
+    return { dir: path.relative(ROOT, path.dirname(ms[0].dir)), absDir: path.dirname(ms[0].dir), total: ms.reduce((s, m) => s + m.files.length, 0), ads: ms.map(withUrls) };
+  });
+  return { id: job.id };
+}));
+
+// ── Live updates (Server-Sent Events) ───────────────────────────────────────
+// Editors subscribe here. When Claude (MCP or chat) edits the workspace or a brand changes on
+// disk, open editors refresh without a reload.
+
+const clients = new Set();
+app.get('/api/events', (req, res) => {
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+  res.write('retry: 2000\n\n');
+  clients.add(res);
+  const ping = setInterval(() => res.write(': ping\n\n'), 25000);
+  req.on('close', () => { clearInterval(ping); clients.delete(res); });
+});
+const broadcast = (data) => { for (const c of clients) c.write(`data: ${JSON.stringify(data)}\n\n`); };
+
+function watchDir(dir, opts, onChange) {
+  let timer;
+  fs.mkdir(dir, { recursive: true }).then(() => {
+    try {
+      watch(dir, opts, (_e, file) => { clearTimeout(timer); timer = setTimeout(() => onChange(String(file ?? '')), 150); });
+    } catch (e) { console.warn(`Not watching ${dir}: ${e.message}`); }
+  });
+}
+watchDir(DATA_DIR, {}, async (file) => {
+  if (!file.startsWith('workspace.json')) return;
+  const ws = await getWorkspace();
+  if (ws) broadcast({ type: 'workspace', source: ws.source, updatedAt: ws.updatedAt });
+});
+watchDir(BRANDS_DIR, { recursive: true }, (file) => { if (!file.includes('.cache')) broadcast({ type: 'meta' }); });
+watchDir(CATALOG_DIR, {}, () => broadcast({ type: 'catalogs' }));
+watchDir(TEMPLATES_DIR, {}, () => broadcast({ type: 'meta' })); // custom templates added / edited
+
+// ── Shared workspace (what's open in the editor) ────────────────────────────
+
+app.get('/api/workspace', api(async () => (await getWorkspace()) ?? {}));
+app.put('/api/workspace', api(async (req) => {
+  const { brand, design, focus, source } = req.body;
+  const ws = await setWorkspace({ brand, design, focus, source });
+  return { updatedAt: ws.updatedAt };
+}));
+
+// ── Settings ────────────────────────────────────────────────────────────────
+
+const settingsView = async (s, fresh = false) => ({ ...publicSettings(s), claudeCode: await claudeCodeStatus({ fresh, override: s.claude.codePath }) });
+app.get('/api/settings', api(async (req) => settingsView(await getSettings(), req.query.fresh === '1')));
+app.put('/api/settings', api(async (req) => settingsView(await saveSettings(req.body))));
+app.post('/api/claude-code/login', api(async () => { startClaudeLogin((await getSettings()).claude.codePath); return { ok: true }; }));
+
+// ── Claude chat (streams newline-delimited JSON events) ─────────────────────
+
+app.post('/api/chat', async (req, res) => {
+  res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-cache' });
+  const emit = (e) => res.write(`${JSON.stringify(e)}\n`);
+  try {
+    const s = await getSettings();
+    const run = s.claude.provider === 'api' ? runChat : runClaudeCodeChat;
+    await run({ conversationId: req.body.conversationId, text: req.body.text, emit, settings: s });
+  } catch (e) {
+    emit({ type: 'error', message: chatErrorMessage(e) });
+    emit({ type: 'done' });
+  }
+  res.end();
+});
+app.post('/api/chat/reset', api(async (req) => { resetChat(req.body.conversationId); resetClaudeCodeChat(req.body.conversationId); return { ok: true }; }));
+
+app.post('/api/captions/ai', async (req, res) => {
+  try { res.json(await writeCaptions(req.body)); } catch (e) { res.status(400).json({ error: chatErrorMessage(e) }); }
+});
+
+// "Write with Claude" in the Words step: returns copy only, never touches the design.
+app.post('/api/copy', async (req, res) => {
+  try { res.json(await writeCopy(req.body)); } catch (e) { res.status(400).json({ error: chatErrorMessage(e) }); }
+});
+
+/**
+ * Start the editor server. Binds to localhost by default: the API can open folders, accept
+ * uploads and store settings (incl. an API key), so it must not be reachable from the network.
+ * Set HOST=0.0.0.0 only if you understand that. Port 0 picks a free port (used by the desktop app).
+ */
+export function startServer({ port = PORT, host = process.env.HOST ?? '127.0.0.1' } = {}) {
+  ensureWorkspace();
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, host, () => resolve({ server, port: server.address().port }));
+    server.on('error', reject);
+  });
+}
+
+// Run directly (`npm start` / `node src/server.js`), as opposed to being imported by the desktop app.
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  const { server, port } = await startServer();
+  console.log(`Content Chef editor → http://localhost:${port}`);
+  const shutdown = async () => { server.close(); await closeBrowser(); process.exit(0); };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}

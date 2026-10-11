@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="g" cx="70%" cy="25%" r="85%">
+      <stop offset="0" stop-color="#8A4A22"/>
+      <stop offset=".55" stop-color="#3B261A"/>
+      <stop offset="1" stop-color="#140F0C"/>
+    </radialGradient>
+    <g id="bean">
+      <ellipse rx="46" ry="64" fill="#5A3420"/>
+      <path d="M0 -58 C -18 -20, 18 20, 0 58" stroke="#2A1810" stroke-width="9" fill="none" stroke-linecap="round"/>
+    </g>
+  </defs>
+  <rect width="1200" height="1200" fill="url(#g)"/>
+  <g opacity=".9">
+    <use href="#bean" transform="translate(860 210) rotate(28)"/>
+    <use href="#bean" transform="translate(1010 360) rotate(-18) scale(.9)"/>
+    <use href="#bean" transform="translate(760 420) rotate(64) scale(1.1)"/>
+    <use href="#bean" transform="translate(1080 120) rotate(110) scale(.8)"/>
+    <use href="#bean" transform="translate(940 560) rotate(-48) scale(.75)"/>
+    <use href="#bean" transform="translate(640 160) rotate(-72) scale(.7)"/>
+    <use href="#bean" transform="translate(180 980) rotate(40) scale(.8)"/>
+    <use href="#bean" transform="translate(330 1100) rotate(-30) scale(.7)"/>
+  </g>
+</svg>

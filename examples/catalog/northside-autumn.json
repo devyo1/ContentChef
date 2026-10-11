@@ -1,0 +1,39 @@
+{
+  "brand": "northside-coffee",
+  "campaign": "autumn-2026",
+  "defaults": {
+    "templates": ["headline", "split"],
+    "palettes": ["espresso"],
+    "formats": ["ig-square", "ig-portrait", "story", "fb-feed", "linkedin"]
+  },
+  "items": [
+    {
+      "id": "maple-oat-latte",
+      "eyebrow": "New this autumn",
+      "headline": ["Maple *oat* latte is back.", "Sweater weather, *sorted*."],
+      "subhead": "Real maple, house-made oat milk, double ristretto.",
+      "cta": "Order ahead",
+      "background": "assets/beans-abstract.svg",
+      "caption": { "hashtags": ["MapleLatte", "AutumnMenu"] }
+    },
+    {
+      "id": "loyalty-offer",
+      "template": "offer",
+      "palettes": ["espresso", "ember"],
+      "eyebrow": "Members only",
+      "offer": "2 for 1",
+      "headline": "on every pour-over, every Monday",
+      "cta": "Join free",
+      "footnote": "In-store only. Ends 30 Nov."
+    },
+    {
+      "id": "review-sam",
+      "template": "quote",
+      "palettes": ["cream"],
+      "headline": "Best flat white north of the river. I'm not even being polite.",
+      "attribution": "— Sam R., Google review",
+      "rating": 5,
+      "cta": "Visit us"
+    }
+  ]
+}
