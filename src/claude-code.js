@@ -49,6 +49,10 @@ export function childEnv() {
   return env;
 }
 
+/** Claude Code output that means "you need to (re)sign in": missing login, expired or revoked session. */
+export const AUTH_ERROR = /not logged in|\/login|failed to authenticate|oauth|session expired|could not be refreshed|invalid api key|unauthori[sz]ed|\b401\b/i;
+export const SIGN_IN_MESSAGE = 'Your Claude sign-in is missing or has expired. Press "Sign in with Claude" (one time, opens your browser), then try again.';
+
 let statusCache = null;
 export async function claudeCodeStatus({ fresh = false, override } = {}) {
   if (!fresh && statusCache && Date.now() - statusCache.at < 30000) return statusCache.value;
@@ -127,8 +131,8 @@ export async function runClaudeCodeChat({ conversationId, text, emit, settings }
       emit({ type: 'text', delta: e.event.delta.text });
     } else if (e.type === 'assistant') {
       for (const b of e.message?.content ?? []) {
-        // The CLI's own sign-in notice arrives as assistant text; the result event replaces it with a friendlier error.
-        if (b.type === 'text' && !streamedText && !/^Not logged in/i.test(b.text)) emit({ type: 'text', delta: b.text });
+        // The CLI's own sign-in errors arrive as assistant text; the result event replaces them with a friendlier error.
+        if (b.type === 'text' && !streamedText && !/^(Not logged in|Failed to authenticate|Invalid API key)/i.test(b.text)) emit({ type: 'text', delta: b.text });
         if (b.type === 'tool_use') emit({ type: 'tool', id: b.id, name: short(b.name), input: b.input });
       }
     } else if (e.type === 'user') {
@@ -143,7 +147,10 @@ export async function runClaudeCodeChat({ conversationId, text, emit, settings }
       }
     } else if (e.type === 'result' && e.is_error) {
       const msg = String(e.result ?? e.subtype ?? 'Claude Code reported an error');
-      emit({ type: 'error', message: /not logged in|\/login/i.test(msg) ? 'Claude Code is not signed in. Open Settings → Claude assistant and press "Sign in with Claude".' : msg });
+      if (AUTH_ERROR.test(msg)) {
+        statusCache = null; // so the editor re-checks and shows the sign-in button
+        emit({ type: 'error', message: SIGN_IN_MESSAGE, signIn: true });
+      } else emit({ type: 'error', message: msg });
     }
   };
 
