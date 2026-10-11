@@ -19,22 +19,38 @@ export function findClaude(override) {
       if (dir && fs.existsSync(p)) return p;
     }
   }
-  const bundles = process.platform === 'win32'
-    ? path.join(process.env.APPDATA ?? '', 'Claude', 'claude-code')
-    : path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude-code');
-  // Layouts seen: <version>/claude(.exe) and <version>/<build-id>/claude(.exe). Newest version wins.
-  try {
-    const versions = fs.readdirSync(bundles).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-    for (const v of versions) {
-      const dir = path.join(bundles, v);
-      if (fs.existsSync(path.join(dir, exe))) return path.join(dir, exe);
-      for (const sub of fs.readdirSync(dir)) {
-        const p = path.join(dir, sub, exe);
-        if (fs.existsSync(p)) return p;
+  for (const bundles of claudeBundleDirs()) {
+    // Layouts seen: <version>/claude(.exe) and <version>/<build-id>/claude(.exe). Newest version wins.
+    try {
+      const versions = fs.readdirSync(bundles).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      for (const v of versions) {
+        const dir = path.join(bundles, v);
+        if (fs.existsSync(path.join(dir, exe))) return path.join(dir, exe);
+        for (const sub of fs.readdirSync(dir)) {
+          const p = path.join(dir, sub, exe);
+          if (fs.existsSync(p)) return p;
+        }
       }
-    }
-  } catch { /* not installed there */ }
+    } catch { /* not installed there */ }
+  }
   return null;
+}
+
+/**
+ * Where the Claude desktop app keeps its copy of Claude Code. On Windows the Store/MSIX build
+ * of Claude keeps its AppData in a private package folder that other apps (like Content Chef
+ * started from the Start menu) can't see through %APPDATA%, so look there directly too.
+ */
+function claudeBundleDirs() {
+  if (process.platform !== 'win32') return [path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude-code')];
+  const dirs = [path.join(process.env.APPDATA ?? '', 'Claude', 'claude-code')];
+  const pkgs = path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), 'Packages');
+  try {
+    for (const p of fs.readdirSync(pkgs)) {
+      if (/^(Anthropic\.)?Claude_/i.test(p)) dirs.push(path.join(pkgs, p, 'LocalCache', 'Roaming', 'Claude', 'claude-code'));
+    }
+  } catch { /* no Store apps */ }
+  return dirs;
 }
 
 /**
@@ -48,6 +64,10 @@ export function childEnv() {
   }
   return env;
 }
+
+/** Claude Code output that means "you need to (re)sign in": missing login, expired or revoked session. */
+export const AUTH_ERROR = /not logged in|\/login|failed to authenticate|oauth|session expired|could not be refreshed|invalid api key|unauthori[sz]ed|\b401\b/i;
+export const SIGN_IN_MESSAGE = 'Your Claude sign-in is missing or has expired. Press "Sign in with Claude" (one time, opens your browser), then try again.';
 
 let statusCache = null;
 export async function claudeCodeStatus({ fresh = false, override } = {}) {
@@ -129,8 +149,8 @@ export async function runClaudeCodeChat({ conversationId, text, emit, settings }
       emit({ type: 'text', delta: e.event.delta.text });
     } else if (e.type === 'assistant') {
       for (const b of e.message?.content ?? []) {
-        // The CLI's own sign-in notice arrives as assistant text; the result event replaces it with a friendlier error.
-        if (b.type === 'text' && !streamedText && !/^Not logged in/i.test(b.text)) emit({ type: 'text', delta: b.text });
+        // The CLI's own sign-in errors arrive as assistant text; the result event replaces them with a friendlier error.
+        if (b.type === 'text' && !streamedText && !/^(Not logged in|Failed to authenticate|Invalid API key)/i.test(b.text)) emit({ type: 'text', delta: b.text });
         if (b.type === 'tool_use') emit({ type: 'tool', id: b.id, name: short(b.name), input: b.input });
       }
     } else if (e.type === 'user') {
@@ -145,7 +165,10 @@ export async function runClaudeCodeChat({ conversationId, text, emit, settings }
       }
     } else if (e.type === 'result' && e.is_error) {
       const msg = String(e.result ?? e.subtype ?? 'Claude Code reported an error');
-      emit({ type: 'error', message: /not logged in|\/login/i.test(msg) ? 'Claude Code is not signed in. Open Settings → Claude assistant and press "Sign in with Claude".' : msg });
+      if (AUTH_ERROR.test(msg)) {
+        statusCache = null; // so the editor re-checks and shows the sign-in button
+        emit({ type: 'error', message: SIGN_IN_MESSAGE, signIn: true });
+      } else emit({ type: 'error', message: msg });
     }
   };
 

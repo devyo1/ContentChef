@@ -1,6 +1,6 @@
 // Floating Claude assistant (bottom-right). Streams replies from /api/chat; Claude works on the
 // same editor through tools, so changes it makes appear on screen as it goes.
-import { html, useState, useEffect, useRef, api, store, useApp, Modal } from './lib.js';
+import { html, useState, useEffect, useRef, api, store, useApp, Modal, toast } from './lib.js';
 import { Icon } from './icons.js';
 
 const TOOL_LABELS = {
@@ -19,6 +19,29 @@ const SUGGESTIONS = [
   'Turn this into a 6-second typewriter video for Stories',
   'Write Instagram and LinkedIn captions in my brand voice',
 ];
+
+/**
+ * One-click Claude sign-in (Claude Code): opens the sign-in window, then checks every few seconds
+ * until the login lands, so chat starts working without restarting anything.
+ */
+function SignInButton() {
+  const { refreshSettings } = useApp();
+  const [waiting, setWaiting] = useState(false);
+  const start = async () => {
+    try { await api('POST', '/api/claude-code/login'); } catch (e) { toast(e.message, 'err'); return; }
+    setWaiting(true);
+    const until = Date.now() + 5 * 60 * 1000;
+    const check = async () => {
+      const s = await refreshSettings().catch(() => null);
+      if (s?.claudeCode?.loggedIn) { setWaiting(false); toast('Signed in. Claude is ready.'); return; }
+      if (Date.now() < until) setTimeout(check, 3000); else setWaiting(false);
+    };
+    setTimeout(check, 4000);
+  };
+  return waiting
+    ? html`<div class="signin-wait"><span class="spin"></span>Finish signing in in the window that opened (it uses your browser). This updates by itself.</div>`
+    : html`<button class="btn primary" onClick=${start}>Sign in with Claude</button>`;
+}
 
 const newId = () => (crypto.randomUUID?.() ?? String(Math.random())).slice(0, 18);
 // Keep stored history light: drop large images from older messages.
@@ -63,7 +86,7 @@ export function ChatWidget() {
         const i = out.findIndex((x) => x.role === 'tool' && x.id === e.id);
         if (i >= 0) out[i] = { ...out[i], status: e.ok ? 'ok' : 'error', summary: e.summary, images: e.images };
       } else if (e.type === 'error') {
-        out.push({ role: 'error', text: e.message });
+        out.push({ role: 'error', text: e.message, signIn: !!e.signIn });
       }
       return out;
     });
@@ -118,9 +141,12 @@ export function ChatWidget() {
             <span>${viaApi
               ? 'Add your Anthropic API key in Settings to chat with Claude here.'
               : settings?.claudeCode?.installed
-                ? 'Sign in with your Claude account (one time, no API key) in Settings to chat here.'
+                ? 'Your Claude sign-in is missing or expired. Sign in with your Claude account (one time, no API key) to chat here.'
                 : "Claude Code wasn't found. Install the Claude desktop app, or use an API key."} Claude can see and edit your ads, generate palettes, write copy and export.</span>
-            <button class="btn primary" onClick=${() => setTab('settings')}>Open Settings</button>
+            <div class="row" style=${{ justifyContent: 'center' }}>
+              ${!viaApi && settings?.claudeCode?.installed && html`<${SignInButton} />`}
+              <button class="btn" onClick=${() => setTab('settings')}>Settings</button>
+            </div>
           </div>`}
         ${hasKey && !msgs.length && html`
           <div class="chat-empty">
@@ -136,7 +162,8 @@ export function ChatWidget() {
               ${(m.images ?? []).map((src, j) => html`<img key=${j} src=${src} onClick=${() => setZoom(src)} />`)}
             </div>`;
           }
-          return html`<div class=${`msg ${m.role}`} key=${i}>${m.text || (busy && i === msgs.length - 1 ? html`<span class="typing"><i></i><i></i><i></i></span>` : '')}</div>`;
+          return html`<div class=${`msg ${m.role}`} key=${i}>${m.text || (busy && i === msgs.length - 1 ? html`<span class="typing"><i></i><i></i><i></i></span>` : '')}
+            ${m.signIn && i === msgs.length - 1 && html`<div style=${{ marginTop: '8px' }}><${SignInButton} /></div>`}</div>`;
         })}
       </div>
       <div class="chat-input">
