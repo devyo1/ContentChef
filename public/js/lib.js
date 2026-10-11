@@ -6,11 +6,12 @@ import htm from 'htm';
 export const html = htm.bind(h);
 export { h, render, createContext, useState, useEffect, useRef, useMemo, useContext, useCallback };
 
-export async function api(method, url, body) {
+export async function api(method, url, body, { signal } = {}) {
   const res = await fetch(url, {
     method,
     headers: body !== undefined ? { 'content-type': 'application/json' } : {},
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal,
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? res.statusText);

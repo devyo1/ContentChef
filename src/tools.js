@@ -323,7 +323,7 @@ tool('save_template',
       .describe('Brand/palette/copy for the test render (defaults: first brand, sample copy)'),
   },
   async ({ test, ...spec }) => {
-    const saved = saveCustomTemplate({ ...spec, author: 'Claude' }, Object.keys(TEMPLATES));
+    const saved = saveCustomTemplate({ ...spec, author: 'AI assistant' }, Object.keys(TEMPLATES));
     const sheet = await templateTestSheet(saved.id, test ?? {});
     return [text(`Saved custom template "${saved.id}" (${saved.name}). It's in the app's template browser under Custom. Use it like any template: template:"${saved.id}".`), sheet];
   });
@@ -459,7 +459,7 @@ async function snapshot(ws, { image: wantImage = true } = {}) {
   const ads = d.mode === 'bulk' ? rows.length : 1 + (d.variants ?? []).filter((v) => v?.trim()).length;
   const info = {
     brand: { id: b.id, name: b.name, palettes: Object.keys(b.palettes), assets: b.assets },
-    lastEditedBy: ws.source === 'claude' ? 'claude' : 'user',
+    lastEditedBy: ['claude', 'assistant'].includes(ws.source) ? 'assistant' : 'user',
     design: d,
     inFocus: { ...focus, ...(d.mode === 'bulk' ? { rowCopy: rows[focus.row] } : {}) },
     willExport: `${ads} ad(s) x ${d.templates.length} template(s) x ${d.palettes.length} palette(s) x ${d.formats.length} size(s)`,
@@ -526,7 +526,7 @@ Returns the updated design and a rendered image so you can check the result.`,
     if (a.campaign) d.campaign = a.campaign;
     if (a.output) d.output = { ...d.output, ...a.output };
     const focus = { ...ws.focus, ...(a.focus ?? {}) };
-    const saved = await setWorkspace({ brand: b.id, design: d, focus, source: 'claude' });
+    const saved = await setWorkspace({ brand: b.id, design: d, focus, source: 'assistant' });
     return a.show ? snapshot(saved) : text('Editor updated.');
   });
 
@@ -644,4 +644,3 @@ tool('render_catalog', 'Render all ads in a saved campaign (or only the given id
     if (include_sheet) out.push(await sheetFor(ms));
     return out;
   });
-

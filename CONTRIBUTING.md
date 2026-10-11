@@ -20,7 +20,9 @@ npm test           # unit tests (fast, no browser)
 | `src/core/templates/` | One file per template. `base.js` holds shared CSS/helpers; `runtime.client.js` runs inside each ad page (text fitting, animation timeline, effects). |
 | `src/tools.js` | Every action an AI assistant can take, defined once (zod schemas + handlers). |
 | `src/mcp.js` | Exposes those tools over MCP (Claude Desktop, Claude Code, other clients). |
-| `src/chat.js`, `src/claude-code.js` | The in-app chat: via the Anthropic API, or via the user's local Claude Code. |
+| `src/chat.js`, `src/claude-code.js`, `src/codex.js` | The in-app chat: Anthropic API, local Claude Code, or ChatGPT through local Codex. |
+| `src/copywriter.js` | Copy and caption generation, routed through the same assistant connection. |
+| `src/website-scan.js`, `src/brand-import.js` | Public website/CSS extraction, isolated rendering for JS-only pages, validated AI brand drafts and explicit creation. |
 | `src/server.js` | Local web server for the editor (binds to localhost only). |
 | `public/` | The editor UI: Preact + htm, no build step. |
 | `electron/` | The desktop app shell. |
@@ -41,3 +43,4 @@ npm test           # unit tests (fast, no browser)
 - Rendering must be deterministic: no `Date.now()` or randomness inside templates (except defaults the user can override, like the lock-screen date).
 - Colours come from the palette. Use the CSS variables (`--bg`, `--fg`, `--accent`, `--block`, `--g1…`), never hard-coded brand colours.
 - Run `npm test` before opening a PR.
+- Codex integration tests use local child-process fixtures and need no account. For a live check, sign in to Codex with ChatGPT, choose it in Settings, ask the assistant to inspect/edit a demo design, send a follow-up, and try both copywriting and captions.

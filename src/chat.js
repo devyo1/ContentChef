@@ -24,7 +24,7 @@ const TOOL_DEFS = TOOLS.map((t) => {
 const VALIDATORS = Object.fromEntries(TOOLS.map((t) => [t.name, z.object(t.schema)]));
 
 class MissingKeyError extends Error {
-  constructor() { super('Claude needs an API key. Add one in Settings → Claude assistant.'); }
+  constructor() { super('Claude needs an API key. Add one in Settings → AI assistant.'); }
 }
 
 const conversations = new Map(); // conversationId → Anthropic message history
@@ -123,7 +123,7 @@ export async function runChat({ conversationId, text, emit }) {
 /** Friendly message for API errors, using the SDK's typed error classes. */
 export function chatErrorMessage(err) {
   if (err instanceof MissingKeyError) return err.message;
-  if (err instanceof Anthropic.AuthenticationError) return 'Claude needs an API key. Add one in Settings → Claude assistant.';
+  if (err instanceof Anthropic.AuthenticationError) return 'Claude needs an API key. Add one in Settings → AI assistant.';
   if (err instanceof Anthropic.PermissionDeniedError) return "This API key doesn't have access to that model. Pick another model in Settings.";
   if (err instanceof Anthropic.NotFoundError) return 'That model was not found. Pick another model in Settings.';
   if (err instanceof Anthropic.RateLimitError) return 'Rate limited by the API. Wait a moment and try again.';

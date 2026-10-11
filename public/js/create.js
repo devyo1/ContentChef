@@ -8,6 +8,7 @@ import { BulkTable, BULK_FIELDS } from './bulk.js';
 import { PaletteCard, PalettesModal, GeneratorModal, brandForSave, slug } from './palette-ui.js';
 import { Icon } from './icons.js';
 import { glowColors } from './color.js';
+import { assistantName } from './assistant.js';
 
 export const PLATFORM_GROUPS = [
   ['Instagram', ['ig-square', 'ig-portrait', 'story']],
@@ -200,11 +201,12 @@ function TextField({ label, hint, value, onInput, placeholder, rows, type }) {
 }
 
 /**
- * "Write with Claude": one click writes copy for the fields the chosen templates use, from the
+ * AI copywriting: one click writes copy for the fields the chosen templates use, from the
  * brand voice and current copy; an optional brief steers it. Only ever changes the words.
  */
-function WriteWithClaude({ d, set }) {
-  const { brand } = useApp();
+function WriteWithAssistant({ d, set }) {
+  const { brand, settings } = useApp();
+  const name = assistantName(settings);
   const bulk = d.mode === 'bulk';
   const [open, setOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -227,7 +229,7 @@ function WriteWithClaude({ d, set }) {
         ...(bulk && r.rows?.length ? { rows: r.rows } : {}),
         ...(!bulk && nVersions > 0 ? { variants: r.versions ?? [] } : {}),
       }));
-      toast(bulk ? `Claude wrote ${plural(r.rows?.length ?? 0, 'ad')}` : 'Claude rewrote your copy');
+      toast(bulk ? `${name} wrote ${plural(r.rows?.length ?? 0, 'ad')}` : `${name} rewrote your copy`);
     } catch (e) {
       toast(e.message, 'err');
     } finally {
@@ -239,7 +241,7 @@ function WriteWithClaude({ d, set }) {
     <div class="ai-write">
       <div class="row nowrap">
         <button class="btn ai grow" onClick=${run} disabled=${busy} title="Writes the words only, from your brand's voice and what's there now">
-          <${Icon} name="sparkles" size=${15} /> ${busy ? 'Writing…' : prompt.trim() ? 'Write from my brief' : 'Write with Claude'}
+          <${Icon} name="sparkles" size=${15} /> ${busy ? 'Writing…' : prompt.trim() ? 'Write from my brief' : `Write with ${name}`}
         </button>
         <button class="icon-btn ${open ? 'on' : ''}" title="Add a brief" onClick=${() => setOpen(!open)}><span style=${{ display: 'inline-flex', transform: open ? 'rotate(180deg)' : '' }}><${Icon} name="chevron" /></span></button>
         ${undo && !busy && html`<button class="btn small ghost" onClick=${() => { set(undo); setUndo(null); }} title="Put the previous words back"><${Icon} name="reset" size=${13} /> Undo</button>`}
@@ -266,7 +268,7 @@ function WordsStep({ d, set, setContent, extras, usedFields }) {
     <${Section} n="1" title="Words" hint=${bulk ? `${plural(count, 'ad')} in your list` : 'What your ad says'}>
       <${Segmented} value=${d.mode} onChange=${(mode) => set({ mode })}
         options=${[{ value: 'single', label: 'One ad' }, { value: 'bulk', label: 'Many ads (bulk)' }]} />
-      <${WriteWithClaude} d=${d} set=${set} />
+      <${WriteWithAssistant} d=${d} set=${set} />
       ${bulk
         ? html`
           <${BulkTable} rows=${d.rows} setRows=${(rows) => set({ rows })} fields=${usedFields} />
@@ -450,7 +452,7 @@ function DecorPicker({ c, setContent }) {
       <button class="chip" key=${id} onClick=${() => setContent({ decor: [...list, { preset: id, ...DECOR_DEFAULTS[id] }] })}>＋ ${name}</button>`)}</div>
     ${list.map((dc, i) => html`
       <div class="decor-item" key=${i}>
-        <div class="row between nowrap"><b class="small">${dc.preset ? meta.decorPresets[dc.preset] : 'Custom SVG (from Claude)'}</b>
+        <div class="row between nowrap"><b class="small">${dc.preset ? meta.decorPresets[dc.preset] : 'Custom SVG'}</b>
           <div class="row nowrap">
             <${Segmented} value=${dc.layer === 'back' ? 'back' : 'front'} onChange=${(v) => update(i, { layer: v === 'back' ? 'back' : undefined })} options=${[{ value: 'front', label: 'Front' }, { value: 'back', label: 'Behind' }]} />
             <button class="icon-btn" title="Remove" onClick=${() => remove(i)}><${Icon} name="x" size=${14} /></button>
@@ -1324,7 +1326,8 @@ function ExportPanel({ d, set, rows, exporter }) {
 // ── Captions ─────────────────────────────────────────────────────────────────
 
 function CaptionsPanel({ d, set, previewContent }) {
-  const { meta, brand } = useApp();
+  const { meta, brand, settings } = useApp();
+  const name = assistantName(settings);
   const platforms = [...new Set(d.formats.map((f) => meta.formats[f].platform))];
   const [tab, setTab] = useState(null);
   const [gen, setGen] = useState({});
@@ -1359,7 +1362,7 @@ function CaptionsPanel({ d, set, previewContent }) {
     try {
       const r = await api('POST', '/api/captions/ai', { brand: brand.id, content: previewContent, platforms, prompt: brief?.trim() || undefined });
       set((prev) => ({ captions: { ...prev.captions, ...r } }));
-      toast(`Claude wrote ${plural(Object.keys(r).length, 'caption')}`);
+      toast(`${name} wrote ${plural(Object.keys(r).length, 'caption')}`);
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
   };
   const sw = (key, label, on) => html`<button type="button" class="po ${on ? 'on' : ''}" onClick=${() => setPo(key, !on)} title=${`${on ? 'Turn off' : 'Turn on'} ${label.toLowerCase()} for ${meta.platforms[p]?.label ?? p}`}>${on ? '✓' : '✕'} ${label}</button>`;
@@ -1368,7 +1371,7 @@ function CaptionsPanel({ d, set, previewContent }) {
       <div class="row between nowrap">
         <h3>Captions</h3>
         ${editable && html`<div class="row nowrap">
-          <button class="btn small ai" disabled=${busy} onClick=${writeAll} title="Claude writes a caption for every platform, in each one's style"><${Icon} name="sparkles" size=${13} /> ${busy ? 'Writing…' : 'Write with Claude'}</button>
+          <button class="btn small ai" disabled=${busy} onClick=${writeAll} title="Write a caption for every platform, in each one's style"><${Icon} name="sparkles" size=${13} /> ${busy ? 'Writing…' : `Write with ${name}`}</button>
           <button class="icon-btn" title="Add a brief" onClick=${() => setBrief(brief === null ? '' : null)}><span style=${{ display: 'inline-flex', transform: brief !== null ? 'rotate(180deg)' : '' }}><${Icon} name="chevron" /></span></button>
         </div>`}
       </div>

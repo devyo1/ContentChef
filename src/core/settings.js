@@ -8,6 +8,8 @@ const FILE = path.join(DATA_DIR, 'settings.json');
 export const SETTINGS_DEFAULTS = {
   theme: 'system',                 // system | light | dark
   sidebarCollapsed: false,
+  assistant: { provider: 'codex' }, // codex | claude-code | api (Anthropic)
+  codex: { codePath: '', model: '' },
   // provider: 'claude-code' = your Claude account via the local Claude Code CLI (no API key);
   //           'api' = Anthropic API key.
   claude: { provider: 'claude-code', codeModel: '', codePath: '', apiKey: '', model: 'claude-opus-5', effort: 'medium' },
@@ -17,10 +19,22 @@ export const SETTINGS_DEFAULTS = {
 export async function getSettings() {
   try {
     const s = JSON.parse(await fs.readFile(FILE, 'utf8'));
-    return { ...SETTINGS_DEFAULTS, ...s, claude: { ...SETTINGS_DEFAULTS.claude, ...s.claude }, export: { ...SETTINGS_DEFAULTS.export, ...s.export } };
+    return normalizeSettings(s);
   } catch {
     return structuredClone(SETTINGS_DEFAULTS);
   }
+}
+
+/** Preserve the selected Claude connection when opening settings from older versions. */
+export function normalizeSettings(s = {}) {
+  const provider = s.assistant?.provider ?? (s.claude ? s.claude.provider ?? 'claude-code' : 'codex');
+  return {
+    ...SETTINGS_DEFAULTS, ...s,
+    assistant: { provider },
+    codex: { ...SETTINGS_DEFAULTS.codex, ...s.codex },
+    claude: { ...SETTINGS_DEFAULTS.claude, ...s.claude },
+    export: { ...SETTINGS_DEFAULTS.export, ...s.export },
+  };
 }
 
 /** Settings safe to send to the browser: the API key is never echoed back, only whether one is set. */
@@ -31,7 +45,16 @@ export function publicSettings(s) {
 
 export async function saveSettings(patch) {
   const cur = await getSettings();
-  const next = { ...cur, ...patch, claude: { ...cur.claude, ...(patch.claude ?? {}) }, export: { ...cur.export, ...(patch.export ?? {}) } };
+  const next = normalizeSettings({ ...cur, ...patch,
+    assistant: { ...cur.assistant, ...patch.assistant },
+    codex: { ...cur.codex, ...patch.codex },
+    claude: { ...cur.claude, ...patch.claude }, export: { ...cur.export, ...patch.export },
+  });
+  if (!['codex', 'claude-code', 'api'].includes(next.assistant.provider)) throw new Error('Unknown assistant provider');
+  for (const key of ['codePath', 'model']) {
+    if (typeof next.codex[key] !== 'string') throw new Error(`Codex ${key} must be text`);
+    next.codex[key] = next.codex[key].trim();
+  }
   if (patch.claude && patch.claude.apiKey === undefined) next.claude.apiKey = cur.claude.apiKey; // keep the stored key unless replaced
   await fs.mkdir(DATA_DIR, { recursive: true });
   await fs.writeFile(FILE, JSON.stringify(next, null, 2));

@@ -186,6 +186,12 @@ export function BrandsPage() {
           <${Toggle} checked=${!!b.style.grain} onChange=${(grain) => setStyle({ grain })} label="Film grain texture" />
         <//>
 
+        <${BrandSection} title="Audience & ad goals" hint="Your assistant uses this context when writing copy and captions.">
+          <${Field} label="What you offer"><textarea rows="3" value=${b.strategy?.description ?? ''} onInput=${(e) => set({ strategy: { ...b.strategy, description: e.target.value } })} /><//>
+          <${Field} label="Who you want to reach"><textarea rows="3" value=${b.strategy?.audience ?? ''} onInput=${(e) => set({ strategy: { ...b.strategy, audience: e.target.value } })} /><//>
+          <${Field} label="Ad goals & direction"><textarea rows="3" value=${b.strategy?.brief ?? ''} onInput=${(e) => set({ strategy: { ...b.strategy, brief: e.target.value } })} placeholder="What should your ads promote?" /><//>
+        <//>
+
         <${BrandSection} title="Captions" hint="Used to write platform captions. AI assistants also read the voice notes.">
           <${Field} label="Brand voice" hint="how should captions sound?">
             <textarea rows="2" value=${b.captions?.voice ?? ''} onInput=${(e) => setCaps({ voice: e.target.value })} placeholder="Warm, cheeky, short sentences. Never salesy." />

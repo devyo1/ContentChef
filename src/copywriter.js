@@ -1,12 +1,22 @@
-// "Write with Claude" for the Words step: one request that returns ONLY copy (headline, body,
+// AI copywriting for the Words step: one request that returns ONLY copy (headline, body,
 // list points…) for the fields the chosen templates use. No tools, no design changes. Works with
-// either provider: the Anthropic API (structured JSON output) or the local Claude Code CLI.
+// ChatGPT through Codex, the Anthropic API, or the local Claude Code CLI.
 import { spawn } from 'node:child_process';
 import Anthropic from '@anthropic-ai/sdk';
 import { jsonSchemaOutputFormat } from '@anthropic-ai/sdk/helpers/json-schema';
 import { z } from 'zod';
 import { loadBrand, getSettings, getTemplate, DATA_DIR, PLATFORMS } from './core/index.js';
 import { findClaude, childEnv } from './claude-code.js';
+import { writeWithCodex } from './codex.js';
+
+export function writeWithProvider(settings, req) {
+  switch (settings.assistant.provider) {
+    case 'codex': return writeWithCodex(settings, req);
+    case 'api': return viaApi(settings, req);
+    case 'claude-code': return viaClaudeCode(settings, req);
+    default: throw new Error('Choose an assistant connection in Settings.');
+  }
+}
 
 // What each copy field is, with length guidance (the layouts auto-fit, but short reads better).
 const FIELD_GUIDE = {
@@ -59,6 +69,7 @@ function buildRequest({ brand, mode, templates, content, rows, prompt, versions,
 
   const lines = [
     `Brand: ${brand.name}${brand.tagline ? ` (${brand.tagline})` : ''}`,
+    brand.strategy ? `Brand context (use when relevant; the current brief takes priority): ${JSON.stringify(brand.strategy)}` : '',
     brand.captions?.voice ? `Voice: ${brand.captions.voice}` : 'Voice: clear, confident, human.',
     brand.handle ? `Handle: ${brand.handle}` : '',
     tpls.length ? `The copy goes into these layouts:\n${tpls.join('\n')}` : '',
@@ -110,9 +121,9 @@ async function viaApi(settings, req) {
     max_tokens: 16000,
     thinking: { type: 'adaptive' },
     output_config: { effort: 'low', format: jsonSchemaOutputFormat(req.schema) },
-    system: SYSTEM,
+    system: req.system || SYSTEM,
     messages: [{ role: 'user', content: req.text }],
-  });
+  }, { signal: req.signal });
   if (res.stop_reason === 'refusal') throw new Error('Claude declined to write that. Try a different brief.');
   if (!res.parsed_output) throw new Error('Claude did not return usable copy. Try again.');
   return res.parsed_output;
@@ -122,22 +133,23 @@ async function viaApi(settings, req) {
 async function viaClaudeCode(settings, req) {
   const exe = findClaude(settings.claude.codePath);
   if (!exe) throw new Error('Claude Code was not found. Install the Claude desktop app, or add an API key in Settings.');
-  const args = ['-p', '--output-format', 'json', '--tools', '', '--strict-mcp-config', '--append-system-prompt', SYSTEM];
+  const args = ['-p', '--output-format', 'json', '--tools', '', '--strict-mcp-config', '--append-system-prompt', req.system || SYSTEM];
   if (settings.claude.codeModel) args.push('--model', settings.claude.codeModel);
   const prompt = `${req.text}\n\nReply with ONLY a JSON object matching this JSON Schema (no prose, no code fences):\n${JSON.stringify(req.schema)}`;
-  const child = spawn(exe, args, { cwd: DATA_DIR, env: childEnv(), windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(exe, args, { cwd: DATA_DIR, env: childEnv(), windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], signal: req.signal });
+  child.stdin.on('error', () => {});
   child.stdin.end(prompt);
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (d) => { stdout += d; });
   child.stderr.on('data', (d) => { stderr += d; });
-  const code = await new Promise((resolve) => child.on('close', resolve));
+  const code = await new Promise((resolve, reject) => { child.on('close', resolve); child.on('error', reject); });
   let result;
   try { result = JSON.parse(stdout); } catch { /* not JSON */ }
   const reply = String(result?.result ?? '');
   if (result?.is_error || code !== 0) {
     const msg = reply || stderr.trim().slice(-300) || `Claude Code exited (${code})`;
-    throw new Error(/not logged in|\/login/i.test(msg) ? 'Claude Code is not signed in. Open Settings → Claude assistant and press "Sign in with Claude".' : msg);
+    throw new Error(/not logged in|\/login/i.test(msg) ? 'Claude Code is not signed in. Open Settings → AI assistant and press "Sign in with Claude".' : msg);
   }
   const a = reply.indexOf('{');
   const b = reply.lastIndexOf('}');
@@ -181,6 +193,7 @@ export async function writeCaptions(input) {
   const copy = Object.fromEntries(['eyebrow', 'headline', 'subhead', 'cta', 'body', 'points', 'stat', 'source', 'offer'].filter((k) => content[k]).map((k) => [k, content[k]]));
   const text = [
     `Brand: ${brand.name}${brand.tagline ? ` (${brand.tagline})` : ''}`,
+    brand.strategy ? `Brand context (use when relevant; the current brief takes priority): ${JSON.stringify(brand.strategy)}` : '',
     `Voice: ${bc.voice || 'clear, confident, human.'}`,
     bc.hashtags?.length ? `Brand hashtags to draw from: ${bc.hashtags.map((h) => `#${String(h).replace(/^#/, '')}`).join(' ')}` : '',
     bc.signoff ? `Sign-off they like: ${bc.signoff}` : '',
@@ -195,7 +208,7 @@ export async function writeCaptions(input) {
     ? { type: 'object', properties: { title: { type: 'string' }, description: { type: 'string' } }, required: ['title', 'description'], additionalProperties: false }
     : { type: 'string' }]));
   const req = { text, schema: { type: 'object', properties, required: platforms, additionalProperties: false } };
-  const out = settings.claude.provider === 'api' ? await viaApi(settings, req) : await viaClaudeCode(settings, req);
+  const out = await writeWithProvider(settings, req);
   return Object.fromEntries(platforms.filter((p) => out[p]).map((p) => {
     const lim = PLATFORMS[p].limit;
     if (p === 'pinterest') return [p, { title: String(out[p].title ?? '').slice(0, PLATFORMS[p].titleLimit), description: String(out[p].description ?? '').slice(0, lim) }];
@@ -209,6 +222,6 @@ export async function writeCopy(input) {
   const brand = await loadBrand(args.brand);
   const settings = await getSettings();
   const req = buildRequest({ ...args, brand });
-  const out = settings.claude.provider === 'api' ? await viaApi(settings, req) : await viaClaudeCode(settings, req);
+  const out = await writeWithProvider(settings, req);
   return clean(out, req, args.mode === 'bulk');
 }

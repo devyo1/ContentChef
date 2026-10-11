@@ -1,5 +1,6 @@
-// Settings: appearance, the Claude assistant (API key + model), export defaults, connecting Claude apps.
+// Settings: appearance, assistant connections, export defaults and MCP clients.
 import { html, useState, api, useApp, Field, Segmented, toast } from './lib.js';
+import { assistantProvider } from './assistant.js';
 
 const MODELS = [
   ['claude-opus-5', 'Claude Opus 5 (recommended)'],
@@ -18,6 +19,18 @@ export function SettingsPage() {
   const [key, setKey] = useState('');
   const c = settings.claude;
   const cc = settings.claudeCode ?? {};
+  const provider = assistantProvider(settings);
+  const cx = settings.codex ?? {};
+  const cs = settings.codexStatus ?? {};
+  const [signingIn, setSigningIn] = useState(false);
+  const signInCodex = async () => {
+    setSigningIn(true);
+    try {
+      await api('POST', '/api/codex/login');
+      toast('Finish signing in in your browser, then press Check again');
+    } catch (e) { toast(e.message, 'err'); }
+    finally { setSigningIn(false); }
+  };
   const signIn = async () => {
     await api('POST', '/api/claude-code/login');
     toast('Finish signing in in the window that opened, then press Check again');
@@ -27,6 +40,8 @@ export function SettingsPage() {
   const q = (s) => `"${s}"`;
   const envFlags = Object.entries(m.env ?? {}).map(([k, v]) => `-e ${k}=${q(v)}`).join(' ');
   const codeCmd = `claude mcp add content-chef ${envFlags} -- ${q(m.command)} ${m.args.map(q).join(' ')}`;
+  const codexEnv = Object.entries(m.env ?? {}).map(([k, v]) => `--env ${q(`${k}=${v}`)}`).join(' ');
+  const codexCmd = `codex mcp add content-chef ${codexEnv} -- ${q(m.command)} ${m.args.map(q).join(' ')}`;
   const desktopJson = JSON.stringify({ mcpServers: { 'content-chef': m } }, null, 2);
 
   const saveKey = async () => {
@@ -48,13 +63,35 @@ export function SettingsPage() {
         </section>
 
         <section class="card">
-          <h3>Claude assistant</h3>
-          <p>Powers the “Ask Claude” chat. Claude sees your design, changes it live, generates palettes, writes copy and exports.</p>
+          <h3>AI assistant</h3>
+          <p>Choose who helps with your designs, copy and captions. Your assistant can see your design, change it live, generate palettes and export.</p>
           <${Field} label="Connect with">
-            <${Segmented} value=${c.provider} onChange=${(provider) => saveSettings({ claude: { provider } })}
-              options=${[{ value: 'claude-code', label: 'My Claude account (no API key)' }, { value: 'api', label: 'Anthropic API key' }]} />
+            <select value=${provider} onChange=${(e) => saveSettings({ assistant: { provider: e.target.value } })}>
+              <option value="codex">My ChatGPT account (via Codex)</option>
+              <option value="claude-code">My Claude account (via Claude Code)</option>
+              <option value="api">Anthropic API key</option>
+            </select>
           <//>
-          ${c.provider !== 'api' ? html`
+          ${provider === 'codex' ? html`
+            <div class="row" style=${{ marginBottom: '10px' }}>
+              <span class=${`status-dot ${cs.loggedIn ? 'ok' : ''}`}></span>
+              <span class="small">${!cs.installed ? 'Codex not found' : cs.loggedIn ? 'Signed in with ChatGPT' : 'Not signed in with ChatGPT yet'}</span>
+            </div>
+            <p class="small muted">Uses your ChatGPT account through Codex on this computer. No API key needed; usage counts against your plan's Codex limits.</p>
+            ${!cs.installed && html`<p class="small">Install <a href="https://developers.openai.com/codex/cli" target="_blank" rel="noopener">Codex CLI</a>, then press Check again.</p><${Cmd} text="npm install -g @openai/codex" />`}
+            ${cs.error && html`<p class="small muted">${cs.error}</p>`}
+            <div class="row">
+              ${cs.installed && !cs.loggedIn && html`<button class="btn primary" disabled=${signingIn} onClick=${signInCodex}>${signingIn ? 'Opening sign-in…' : 'Sign in with ChatGPT'}</button>`}
+              <button class="btn" onClick=${() => refreshSettings().then((s) => toast(s.codexStatus.loggedIn ? 'Signed in ✓' : 'Not signed in yet')).catch((e) => toast(e.message, 'err'))}>Check again</button>
+            </div>
+            <div style=${{ height: '12px' }}></div>
+            <${Field} label="Model" hint="Leave blank for Codex's default, or enter a model available to your ChatGPT account.">
+              <input value=${cx.model ?? ''} placeholder="Codex default" onChange=${(e) => saveSettings({ codex: { model: e.target.value } })} />
+            <//>
+            <${Field} label="Codex executable path (optional)" hint="Detected automatically. Set this only if Codex is installed somewhere else.">
+              <input value=${cx.codePath ?? ''} placeholder="Automatic" onChange=${(e) => saveSettings({ codex: { codePath: e.target.value } })} />
+            <//>`
+          : provider === 'claude-code' ? html`
             <div class="row" style=${{ marginBottom: '10px' }}>
               <span class=${`status-dot ${cc.loggedIn ? 'ok' : ''}`}></span>
               <span class="small">${!cc.installed ? 'Claude Code not found' : cc.loggedIn ? `Signed in${cc.email ? ` as ${cc.email}` : ''}` : 'Not signed in yet'}</span>
@@ -100,8 +137,10 @@ export function SettingsPage() {
         </section>
 
         <section class="card">
-          <h3>Use Content Chef from the Claude apps</h3>
-          <p>Content Chef is also an MCP connector, so Claude Desktop, Claude Code or any MCP client can drive it with the same tools. Whatever Claude changes there shows up here live.</p>
+          <h3>Use Content Chef from other AI apps</h3>
+          <p>Content Chef is also an MCP connector. Codex, Claude Desktop, Claude Code or another MCP client can use the same tools. Changes show up here live.</p>
+          <h5>Codex</h5>
+          <${Cmd} text=${codexCmd} />
           <h5>Claude Code</h5>
           <${Cmd} text=${codeCmd} />
           <h5>Claude Desktop</h5>

@@ -65,6 +65,21 @@ export async function listBrands() {
   return out;
 }
 
+/** New brands never merge into an existing brand with the same name. */
+export async function createBrand(patch, { logoAsset } = {}) {
+  if (!patch.name?.trim()) throw new Error('A new brand needs a name');
+  await fs.mkdir(BRANDS_DIR, { recursive: true });
+  const base = slugify(patch.name);
+  for (let n = 1; n < 1000; n++) {
+    const id = n === 1 ? base : `${base.slice(0, 54)}-${n}`;
+    try { await fs.mkdir(brandDir(id)); }
+    catch (err) { if (err.code === 'EEXIST') continue; throw err; }
+    const logo = logoAsset ? await saveAsset(id, `website-logo.${logoAsset.ext}`, logoAsset.body) : patch.logo;
+    return saveBrand(id, { ...patch, logo: logo ?? null }, { replace: true });
+  }
+  throw new Error('Too many brands share this name. Try a different name.');
+}
+
 export async function loadBrand(id) {
   const dir = brandDir(id);
   let raw;

@@ -3,7 +3,7 @@
 <h1 align="center">Content Chef</h1>
 
 <p align="center">Design social content once, in your brand. Export every size as a crisp image or video.<br>
-Ads <i>and</i> value posts: tips, lists, stats, text posts, photo posts. Built so Claude (or you) can cook it all up.</p>
+Ads <i>and</i> value posts: tips, lists, stats, text posts, photo posts. Built so ChatGPT, Claude (or you) can cook it all up.</p>
 
 ---
 
@@ -23,14 +23,15 @@ Install, open, done. There's no terminal and nothing else to install. Your brand
 
 ## What it does
 
+- **Start a brand from your website.** Choose **New brand → From my website**, paste a URL and optionally describe what you want to advertise or who you want to reach. Your connected assistant reads the page and styles, suggests colours, fonts, audience and voice, and shows a starter kit to review. Choose a detected logo or keep a wordmark, then **Create brand & fine-tune**. The saved audience and ad goals guide later copy and captions. Sites with little readable content, blocked styles or unavailable fonts are flagged in the review; you can always start manually.
 - **Brand kit.** Fonts (picked visually), logo, colourways, button style and caption voice. Everything you make stays on brand.
 - **28 templates in four families:**
   - *Promo & ads*: Headline, Stack, Split, Frame, Big Offer, Event, Ticket, Menu
   - *Value & education*: Insight, List, Big Stat, This vs That, Carousel Cover, Newspaper, Quote, Minimal
   - *Social-native*: Text Post, iPhone Notes, Chat (iMessage), Poll, iPhone notification, liquid glass, highlighter
   - *Photo*: Photo Story, Photo Card, Polaroid, Magazine Cover, Spotlight
-- **Your own templates.** Ask Claude to design a brand-new template; it appears in the template browser under *Custom* (a Receipt example ships with the app).
-- **Write with Claude.** One click in the Words step writes on-brand copy (headline versions, body text, list points or a whole bulk list), with an optional brief and Undo. It only changes the words.
+- **Your own templates.** Ask your assistant to design a brand-new template; it appears in the template browser under *Custom* (a Receipt example ships with the app).
+- **Write with ChatGPT or Claude.** One click in the Words step writes on-brand copy (headline versions, body text, list points or a whole bulk list), with an optional brief and Undo. It only changes the words.
 - **See every variation.** A rail in the preview shows every ad × template × colourway being made, and the Canvas view lays them all out on a free, zoomable board.
 - **Every size at once.** Instagram (feed + Story), TikTok, Facebook, X, LinkedIn, Pinterest, YouTube and display banners. Text auto-fits each size, and Story layouts keep clear of the app UI.
 - **Bulk mode.** Paste a spreadsheet of headlines and get a full set for each row, plus a CSV of every file and caption.
@@ -44,14 +45,19 @@ Install, open, done. There's no terminal and nothing else to install. Your brand
 - **Export your way.** PNG, JPG, MP4 and looping GIF; right-click any ad in Canvas to export just that one, and watch renders come together in the export popup. Undo / redo everything.
 - **Dashboard and Video mode.** See every brand and recent work at a glance, and trim / crop / speed up clips for Reels and Stories.
 
-## Claude can drive it
+## ChatGPT and Claude can drive it
 
-Content Chef is an **MCP connector**, so Claude can see your design (including a rendered image), change it live in your editor, create templates, generate palettes, write copy and export.
+Content Chef is an **MCP connector**, so your assistant can see your design (including a rendered image), change it live in your editor, create templates, generate palettes, write copy and export.
 
-- **In the app:** press **Ask Claude**. It connects through your Claude account via Claude Code (sign in once, no API key needed), or through an Anthropic API key.
-- **From Claude Desktop or Claude Code:** **Settings → Use Content Chef from the Claude apps** shows the exact command or config for your machine.
+- **ChatGPT account:** choose **Settings → AI assistant → My ChatGPT account (via Codex)**. Install a current [Codex CLI](https://developers.openai.com/codex/cli) (`npm install -g @openai/codex`) if needed, click **Sign in with ChatGPT**, finish in your browser, then **Check again**. If Codex is already signed in with ChatGPT, it works immediately. Press **Ask ChatGPT** to start. Copywriting and captions use the same connection, with no API key required.
+- **Claude:** select your Claude account through Claude Code, or an Anthropic API key, in the same settings. Existing installations keep their selected Claude connection.
+- **From Codex, Claude Desktop or Claude Code:** **Settings → Use Content Chef from other AI apps** shows the exact command or config for your machine.
+
+The ChatGPT connection uses Codex's local login and counts against your plan's Codex usage limits. It requires a recent CLI with `--ignore-user-config` support. Content Chef detects native, npm and desktop CLI installations; you can also set an executable path. Leave the model blank for Codex's default or enter a model available to your account. It runs with separate configuration, a read-only sandbox and shell tools disabled, connecting only Content Chef's MCP server. Your Codex settings are not changed. See [Codex authentication](https://developers.openai.com/codex/auth) and [non-interactive mode](https://developers.openai.com/codex/noninteractive).
 
 ## Run from source
+
+Use Node.js 20.18.1 or newer.
 
 ```bash
 npm install
@@ -76,6 +82,7 @@ node src/cli.js brands | templates | formats | catalogs
 
 - Everything runs on your computer. The editor server only listens on `localhost`.
 - Your API key (if you use one) stays in `data/settings.json` on your machine.
+- ChatGPT sign-in credentials stay with Codex; Content Chef does not copy them into its settings or send them to the browser. AI requests send the relevant brief, conversation and tool results to the selected provider.
 - Custom templates are plain HTML/CSS (no scripts), so a template can't run code.
 - Fonts load from Google Fonts while rendering. Upload font files to a brand to work fully offline.
 

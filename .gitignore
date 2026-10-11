@@ -10,6 +10,11 @@
 
 # Local tooling
 .claude/
+.codex/
+.env
+.env.*
+!.env.example
+/auth.json
 *.log
 
 # Machine / test leftovers

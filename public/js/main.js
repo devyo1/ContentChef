@@ -7,6 +7,8 @@ import { VideoPage } from './video.js';
 import { SettingsPage } from './settings-page.js';
 import { ChatWidget } from './chat-ui.js';
 import { Icon } from './icons.js';
+import { assistantName, assistantProvider } from './assistant.js';
+import { NewBrandModal } from './new-brand.js';
 
 const NAV = [
   ['home', 'grid', 'Dashboard'],
@@ -45,27 +47,6 @@ function BrandSwitch({ meta, brand, onPick, onNew }) {
           <button onClick=${onNew}><${Icon} name="plus" /> New brand…</button>
         </div>`}
     </div>`;
-}
-
-function NewBrandModal({ onClose, onCreated }) {
-  const [name, setName] = useState('');
-  const create = async () => {
-    if (!name.trim()) return;
-    try {
-      const b = await api('PUT', '/api/brand/_new', {
-        name: name.trim(),
-        palettes: { main: { bg: '#111111', fg: '#FFFFFF', accent: '#FF5A36', muted: '#A0A0A0', ctaText: '#111111' } },
-        fonts: { display: { family: 'Inter', weight: 800, google: 'Inter:wght@400;500;600;700;800;900' }, body: { family: 'Inter', weight: 400, google: 'Inter:wght@400;500;600;700;800;900' } },
-      });
-      onCreated(b.id);
-    } catch (e) { toast(e.message, 'err'); }
-  };
-  return html`
-    <${Modal} title="New brand" onClose=${onClose}>
-      <${Field} label="Brand name"><input autofocus value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${(e) => e.key === 'Enter' && create()} placeholder="e.g. Northside Coffee" /><//>
-      <p class="muted">Next you'll pick fonts, colours and a logo.</p>
-      <div class="row end"><button class="btn primary" onClick=${create}>Create brand</button></div>
-    <//>`;
 }
 
 function useTheme(theme) {
@@ -109,7 +90,9 @@ function App() {
       setSettings(s);
       if (ws?.design) {
         setWorkspace(ws);
-        if (m?.brands.some((b) => b.id === ws.brand)) pickBrand(ws.brand); // reopen where you (or Claude) left off
+        // While editing a brand kit, preserve that selection instead of reopening an older ad.
+        const hasSelectedBrand = m?.brands.some((b) => b.id === brandRef.current);
+        if ((tab === 'create' || !hasSelectedBrand) && m?.brands.some((b) => b.id === ws.brand)) pickBrand(ws.brand);
       }
     })();
     // Live updates: Claude (chat or MCP) editing the workspace, brands changing on disk.
@@ -121,7 +104,7 @@ function App() {
         const ws = await api('GET', '/api/workspace');
         setWorkspace(ws);
         if (ws.brand && ws.brand !== brandRef.current) pickBrand(ws.brand);
-        if (ws.source === 'claude') toast('✦ Claude updated your design');
+        if (['claude', 'assistant'].includes(ws.source)) toast('✦ Assistant updated your design');
       }
     };
     const onFocus = () => reload();
@@ -136,7 +119,7 @@ function App() {
   if (!meta.brands.length) {
     return html`<div class="loading-screen"><div style=${{ textAlign: 'center', display: 'grid', gap: '14px' }}><h2>Create your first brand</h2>
       <button class="btn primary" onClick=${() => setNewBrand(true)}>＋ New brand</button></div>
-      ${newBrand && html`<${NewBrandModal} onClose=${() => setNewBrand(false)} onCreated=${async (id) => { await reload(); pickBrand(id); setNewBrand(false); setTab('brands'); }} />`}</div>`;
+      ${newBrand && html`<${NewBrandModal} settings=${settings} onClose=${() => setNewBrand(false)} onCreated=${async (id) => { await reload(); pickBrand(id); setNewBrand(false); setTab('brands'); }} />`}</div>`;
   }
   const brand = meta.brands.find((b) => b.id === brandId) ?? meta.brands[0];
   const collapsed = !!settings.sidebarCollapsed;
@@ -154,7 +137,7 @@ function App() {
           </nav>
           <div class="top-actions">
             <button class="icon-btn" title=${dark ? 'Light mode' : 'Dark mode'} onClick=${() => saveSettings({ theme: dark ? 'light' : 'dark' })}><${Icon} name=${dark ? 'sun' : 'moon'} /></button>
-            <button class="ask-btn" onClick=${() => dispatchEvent(new Event('chef:chat'))}><span class="spark"><${Icon} name="sparkles" size=${13} stroke=${2} /></span>Ask Claude</button>
+            <button class="ask-btn" onClick=${() => dispatchEvent(new Event('chef:chat'))}><span class="spark"><${Icon} name="sparkles" size=${13} stroke=${2} /></span>Ask ${assistantName(settings)}</button>
           </div>
         </header>
         <div class="main">
@@ -166,9 +149,9 @@ function App() {
           ${tab === 'settings' && html`<${SettingsPage} />`}
         </div>
       </div>
-      ${newBrand && html`<${NewBrandModal} onClose=${() => setNewBrand(false)} onCreated=${async (id) => { await reload(); pickBrand(id); setNewBrand(false); setTab('brands'); }} />`}
+      ${newBrand && html`<${NewBrandModal} settings=${settings} onClose=${() => setNewBrand(false)} onCreated=${async (id) => { await reload(); pickBrand(id); setNewBrand(false); setTab('brands'); }} />`}
       <a class="rcm-mark" href="https://realcitymedia.com" target="_blank" rel="noopener" title="Made by RealCityMedia">RCM</a>
-      <${ChatWidget} />
+      <${ChatWidget} key=${assistantProvider(settings)} />
       <${Toasts} />
     <//>`;
 }

@@ -11,7 +11,7 @@ export async function getWorkspace() {
   try { return JSON.parse(await fs.readFile(WORKSPACE_FILE, 'utf8')); } catch { return null; }
 }
 
-/** Replace the workspace. `source` identifies the writer ('claude' or an editor tab id). */
+/** Replace the workspace. `source` identifies the writer ('assistant' or an editor tab id). */
 export async function setWorkspace({ brand, design, focus, source = 'unknown' }) {
   await fs.mkdir(DATA_DIR, { recursive: true });
   const ws = { brand, design, focus: focus ?? {}, source, updatedAt: Date.now() };

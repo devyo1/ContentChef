@@ -143,7 +143,7 @@ export async function runClaudeCodeChat({ conversationId, text, emit, settings }
       }
     } else if (e.type === 'result' && e.is_error) {
       const msg = String(e.result ?? e.subtype ?? 'Claude Code reported an error');
-      emit({ type: 'error', message: /not logged in|\/login/i.test(msg) ? 'Claude Code is not signed in. Open Settings → Claude assistant and press "Sign in with Claude".' : msg });
+      emit({ type: 'error', message: /not logged in|\/login/i.test(msg) ? 'Claude Code is not signed in. Open Settings → AI assistant and press "Sign in with Claude".' : msg });
     }
   };
 

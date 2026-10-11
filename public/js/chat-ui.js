@@ -1,7 +1,8 @@
-// Floating Claude assistant (bottom-right). Streams replies from /api/chat; Claude works on the
+// Floating assistant (bottom-right). Streams replies from /api/chat; the assistant works on the
 // same editor through tools, so changes it makes appear on screen as it goes.
 import { html, useState, useEffect, useRef, api, store, useApp, Modal } from './lib.js';
 import { Icon } from './icons.js';
+import { assistantName, assistantProvider, assistantReady, assistantHint } from './assistant.js';
 
 const TOOL_LABELS = {
   get_editor: 'Looking at your design', update_editor: 'Updating the editor', export_editor: 'Exporting',
@@ -26,20 +27,24 @@ const persistable = (msgs) => msgs.slice(-60).map((m, i, a) => (m.images && i < 
 
 export function ChatWidget() {
   const { settings, setTab, refreshSettings } = useApp();
+  const provider = assistantProvider(settings);
+  const historyKey = `chat.${provider}`;
   const [open, setOpen] = useState(store.get('chat.open', false));
-  const [convId, setConvId] = useState(store.get('chat.id', null) ?? newId());
-  const [msgs, setMsgs] = useState(store.get('chat.msgs', []));
+  const [convId, setConvId] = useState(store.get(`${historyKey}.id`, null) ?? newId());
+  const [msgs, setMsgs] = useState(store.get(`${historyKey}.msgs`, []));
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [zoom, setZoom] = useState(null);
   const bodyRef = useRef();
-  const viaApi = settings?.claude?.provider === 'api';
-  const hasKey = viaApi ? settings?.claude?.hasApiKey : settings?.claudeCode?.loggedIn;
+  const name = assistantName(settings);
+  const hasKey = assistantReady(settings);
+  const requestRef = useRef(null);
+  useEffect(() => () => requestRef.current?.abort(), []);
   useEffect(() => { if (open && !hasKey) refreshSettings(); }, [open]);
 
   useEffect(() => store.set('chat.open', open), [open]);
-  useEffect(() => store.set('chat.id', convId), [convId]);
-  useEffect(() => { if (!busy) store.set('chat.msgs', persistable(msgs)); }, [msgs, busy]);
+  useEffect(() => store.set(`${historyKey}.id`, convId), [convId]);
+  useEffect(() => { if (!busy) store.set(`${historyKey}.msgs`, persistable(msgs)); }, [msgs, busy]);
   useEffect(() => { bodyRef.current?.scrollTo({ top: bodyRef.current.scrollHeight, behavior: 'smooth' }); }, [msgs, open]);
 
   const send = async (text) => {
@@ -68,7 +73,8 @@ export function ChatWidget() {
       return out;
     });
     try {
-      const res = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ conversationId: convId, text: t }) });
+      requestRef.current = new AbortController();
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ conversationId: convId, text: t }), signal: requestRef.current.signal });
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = '';
@@ -107,24 +113,20 @@ export function ChatWidget() {
     <div class="chat">
       <div class="chat-head">
         <span class="spark"><${Icon} name="sparkles" size=${15} stroke=${2} /></span>
-        <div class="grow"><b>Claude</b><small>${busy ? 'Working…' : 'Edits your design live'}</small></div>
-        <button class="icon-btn" title="New conversation" onClick=${reset}><${Icon} name="replay" /></button>
+        <div class="grow"><b>${name}</b><small>${busy ? 'Working…' : 'Edits your design live'}</small></div>
+        <button class="icon-btn" title="New conversation" disabled=${busy} onClick=${reset}><${Icon} name="replay" /></button>
         <button class="icon-btn" title="Close" onClick=${() => setOpen(false)}><${Icon} name="x" /></button>
       </div>
       <div class="chat-body" ref=${bodyRef}>
         ${!hasKey && html`
           <div class="chat-empty">
-            <b>Connect Claude</b>
-            <span>${viaApi
-              ? 'Add your Anthropic API key in Settings to chat with Claude here.'
-              : settings?.claudeCode?.installed
-                ? 'Sign in with your Claude account (one time, no API key) in Settings to chat here.'
-                : "Claude Code wasn't found. Install the Claude desktop app, or use an API key."} Claude can see and edit your ads, generate palettes, write copy and export.</span>
+            <b>Connect ${name}</b>
+            <span>${assistantHint(settings)} Your assistant can see and edit your ads, generate palettes, write copy and export.</span>
             <button class="btn primary" onClick=${() => setTab('settings')}>Open Settings</button>
           </div>`}
         ${hasKey && !msgs.length && html`
           <div class="chat-empty">
-            <span>Ask for anything: copy ideas, new looks, colour palettes, bulk variations, videos. Claude sees what you see and changes it directly.</span>
+            <span>Ask for anything: copy ideas, new looks, colour palettes, bulk variations, videos. ${name} sees what you see and changes it directly.</span>
             <div class="suggest">${SUGGESTIONS.map((s) => html`<button onClick=${() => send(s)}>${s}</button>`)}</div>
           </div>`}
         ${msgs.map((m, i) => {
@@ -140,7 +142,7 @@ export function ChatWidget() {
         })}
       </div>
       <div class="chat-input">
-        <textarea rows="1" value=${input} disabled=${!hasKey} placeholder=${busy ? 'Claude is working…' : 'Ask Claude to change your ad…'}
+        <textarea rows="1" value=${input} disabled=${!hasKey} placeholder=${busy ? `${name} is working…` : `Ask ${name} to change your ad…`}
           onInput=${(e) => setInput(e.target.value)}
           onKeyDown=${(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}></textarea>
         <button class="btn primary" disabled=${busy || !input.trim() || !hasKey} onClick=${() => send()} title="Send"><${Icon} name="send" /></button>

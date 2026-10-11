@@ -18,6 +18,9 @@ import {
 import { runChat, resetChat, chatErrorMessage } from './chat.js';
 import { writeCopy, writeCaptions } from './copywriter.js';
 import { claudeCodeStatus, startClaudeLogin, runClaudeCodeChat, resetClaudeCodeChat } from './claude-code.js';
+import { codexStatus, startCodexLogin, runCodexChat, resetCodexChat } from './codex.js';
+import { draftBrand, acceptBrandDraft } from './brand-import.js';
+import { createBrand } from './core/brands.js';
 
 const PORT = Number(process.env.PORT ?? 4545);
 const app = express();
@@ -62,11 +65,17 @@ app.get('/api/meta', api(async () => ({
 // ── Brands ──────────────────────────────────────────────────────────────────
 
 app.get('/api/brand/:id', api(async (req) => stripDir(await loadBrand(req.params.id))));
+app.post('/api/brand-import/draft', api(async (req, res) => {
+  const controller = new AbortController();
+  res.on('close', () => controller.abort());
+  return draftBrand(req.body, { signal: controller.signal });
+}));
+app.post('/api/brand-import/create', api(async (req) => stripDir(await acceptBrandDraft(req.body))));
 // Editor saves send the complete brand, so replace rather than merge (lets palettes be deleted).
 app.put('/api/brand/:id', api(async (req) => {
   const isNew = req.params.id === '_new';
   const { version, ...body } = req.body;
-  return stripDir(await saveBrand(isNew ? undefined : req.params.id, body, { replace: !isNew, expectVersion: version }));
+  return stripDir(isNew ? await createBrand(body) : await saveBrand(req.params.id, body, { replace: true, expectVersion: version }));
 }));
 
 app.post('/api/upload', express.raw({ type: '*/*', limit: '500mb' }), api(async (req) => {
@@ -262,33 +271,43 @@ app.put('/api/workspace', api(async (req) => {
 
 // ── Settings ────────────────────────────────────────────────────────────────
 
-const settingsView = async (s, fresh = false) => ({ ...publicSettings(s), claudeCode: await claudeCodeStatus({ fresh, override: s.claude.codePath }) });
+const settingsView = async (s, fresh = false) => {
+  const [claudeCode, codex] = await Promise.all([
+    claudeCodeStatus({ fresh, override: s.claude.codePath }),
+    codexStatus({ fresh, override: s.codex.codePath }),
+  ]);
+  return { ...publicSettings(s), claudeCode, codexStatus: codex };
+};
 app.get('/api/settings', api(async (req) => settingsView(await getSettings(), req.query.fresh === '1')));
 app.put('/api/settings', api(async (req) => settingsView(await saveSettings(req.body))));
 app.post('/api/claude-code/login', api(async () => { startClaudeLogin((await getSettings()).claude.codePath); return { ok: true }; }));
+app.post('/api/codex/login', api(async () => startCodexLogin((await getSettings()).codex.codePath)));
 
-// ── Claude chat (streams newline-delimited JSON events) ─────────────────────
+// ── Assistant chat (streams newline-delimited JSON events) ─────────────────────
 
 app.post('/api/chat', async (req, res) => {
   res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-cache' });
   const emit = (e) => res.write(`${JSON.stringify(e)}\n`);
   try {
     const s = await getSettings();
-    const run = s.claude.provider === 'api' ? runChat : runClaudeCodeChat;
-    await run({ conversationId: req.body.conversationId, text: req.body.text, emit, settings: s });
+    const run = { codex: runCodexChat, api: runChat, 'claude-code': runClaudeCodeChat }[s.assistant.provider];
+    if (!run) throw new Error('Choose an assistant connection in Settings.');
+    const controller = new AbortController();
+    res.on('close', () => controller.abort());
+    await run({ conversationId: req.body.conversationId, text: req.body.text, emit, settings: s, signal: controller.signal });
   } catch (e) {
     emit({ type: 'error', message: chatErrorMessage(e) });
     emit({ type: 'done' });
   }
   res.end();
 });
-app.post('/api/chat/reset', api(async (req) => { resetChat(req.body.conversationId); resetClaudeCodeChat(req.body.conversationId); return { ok: true }; }));
+app.post('/api/chat/reset', api(async (req) => { resetChat(req.body.conversationId); resetClaudeCodeChat(req.body.conversationId); resetCodexChat(req.body.conversationId); return { ok: true }; }));
 
 app.post('/api/captions/ai', async (req, res) => {
   try { res.json(await writeCaptions(req.body)); } catch (e) { res.status(400).json({ error: chatErrorMessage(e) }); }
 });
 
-// "Write with Claude" in the Words step: returns copy only, never touches the design.
+// AI copywriting in the Words step: returns copy only, never touches the design.
 app.post('/api/copy', async (req, res) => {
   try { res.json(await writeCopy(req.body)); } catch (e) { res.status(400).json({ error: chatErrorMessage(e) }); }
 });
