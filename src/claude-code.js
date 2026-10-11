@@ -19,22 +19,38 @@ export function findClaude(override) {
       if (dir && fs.existsSync(p)) return p;
     }
   }
-  const bundles = process.platform === 'win32'
-    ? path.join(process.env.APPDATA ?? '', 'Claude', 'claude-code')
-    : path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude-code');
-  // Layouts seen: <version>/claude(.exe) and <version>/<build-id>/claude(.exe). Newest version wins.
-  try {
-    const versions = fs.readdirSync(bundles).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-    for (const v of versions) {
-      const dir = path.join(bundles, v);
-      if (fs.existsSync(path.join(dir, exe))) return path.join(dir, exe);
-      for (const sub of fs.readdirSync(dir)) {
-        const p = path.join(dir, sub, exe);
-        if (fs.existsSync(p)) return p;
+  for (const bundles of claudeBundleDirs()) {
+    // Layouts seen: <version>/claude(.exe) and <version>/<build-id>/claude(.exe). Newest version wins.
+    try {
+      const versions = fs.readdirSync(bundles).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      for (const v of versions) {
+        const dir = path.join(bundles, v);
+        if (fs.existsSync(path.join(dir, exe))) return path.join(dir, exe);
+        for (const sub of fs.readdirSync(dir)) {
+          const p = path.join(dir, sub, exe);
+          if (fs.existsSync(p)) return p;
+        }
       }
-    }
-  } catch { /* not installed there */ }
+    } catch { /* not installed there */ }
+  }
   return null;
+}
+
+/**
+ * Where the Claude desktop app keeps its copy of Claude Code. On Windows the Store/MSIX build
+ * of Claude keeps its AppData in a private package folder that other apps (like Content Chef
+ * started from the Start menu) can't see through %APPDATA%, so look there directly too.
+ */
+function claudeBundleDirs() {
+  if (process.platform !== 'win32') return [path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude-code')];
+  const dirs = [path.join(process.env.APPDATA ?? '', 'Claude', 'claude-code')];
+  const pkgs = path.join(process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), 'Packages');
+  try {
+    for (const p of fs.readdirSync(pkgs)) {
+      if (/^(Anthropic\.)?Claude_/i.test(p)) dirs.push(path.join(pkgs, p, 'LocalCache', 'Roaming', 'Claude', 'claude-code'));
+    }
+  } catch { /* no Store apps */ }
+  return dirs;
 }
 
 /**
