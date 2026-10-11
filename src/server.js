@@ -23,7 +23,7 @@ import { draftBrand, acceptBrandDraft } from './brand-import.js';
 import { createBrand } from './core/brands.js';
 import { imageStatus, prepareBackground, generateBackground } from './background-images.js';
 import { connectHiggsfield, finishHiggsfield, disconnectHiggsfield, higgsfieldModels } from './higgsfield.js';
-import { listCarousels, loadCarousel, createCarousel, saveCarouselSlide, refineCarouselSlide, exportCarousel } from './carousels.js';
+import { listCarousels, loadCarousel, createCarousel, saveCarouselSlide, refineCarouselSlide, exportCarousel, saveCarouselDesign, generateCarouselDesign } from './carousels.js';
 
 const PORT = Number(process.env.PORT ?? 4545);
 const APP_VERSION = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8')).version;
@@ -70,7 +70,7 @@ app.get('/api/meta', api(async () => ({
 // ── Brands ──────────────────────────────────────────────────────────────────
 
 app.get('/api/brand/:id', api(async (req) => stripDir(await loadBrand(req.params.id))));
-app.post('/api/brand-import/draft', async (req, res) => {
+const progressApi = (work) => async (req, res) => {
   const controller = new AbortController();
   res.on('close', () => controller.abort());
   const streaming = req.get('accept') === 'application/x-ndjson';
@@ -82,7 +82,7 @@ app.post('/api/brand-import/draft', async (req, res) => {
     heartbeat = setInterval(() => send({ type: 'heartbeat' }), 15000);
   }
   try {
-    const result = await draftBrand(req.body, { signal: controller.signal,
+    const result = await work(req.body, { signal: controller.signal,
       onProgress: streaming ? (progress) => send({ type: 'progress', ...progress }) : undefined });
     if (!res.destroyed) {
       if (streaming) { send({ type: 'result', result }); res.end(); }
@@ -94,14 +94,13 @@ app.post('/api/brand-import/draft', async (req, res) => {
       else res.status(400).json({ error: e.message });
     }
   } finally { clearInterval(heartbeat); }
-});
+};
+app.post('/api/brand-import/draft', progressApi(draftBrand));
 app.post('/api/brand-import/create', api(async (req) => stripDir(await acceptBrandDraft(req.body))));
 app.get('/api/carousels', api((req) => listCarousels(req.query.brand)));
 app.get('/api/carousels/:id', api((req) => loadCarousel(req.params.id)));
-app.post('/api/carousels', api(async (req, res) => {
-  const controller = new AbortController(); res.on('close', () => controller.abort());
-  return createCarousel(req.body, { signal: controller.signal });
-}));
+app.put('/api/carousels/:id/design', api(req => saveCarouselDesign(req.params.id, req.body)));
+app.post('/api/carousels', progressApi(createCarousel));
 app.put('/api/carousels/:id/slides/:slide', api((req) => saveCarouselSlide(req.params.id, req.params.slide, req.body)));
 app.post('/api/carousels/:id/slides/:slide/refine', api(async (req, res) => {
   const controller = new AbortController(); res.on('close', () => controller.abort());
@@ -198,6 +197,10 @@ app.post('/api/jobs', api(async (req) => {
   // Keep the exact editor design next to the files, so the export can be reopened and changed later.
   const keepDesign = (dir) => design && fs.writeFile(path.join(dir, 'design.json'), JSON.stringify({ brand, design, savedAt: Date.now() }, null, 2)).catch(() => {});
   const job = startJob(async (onProgress) => {
+    if (mode === 'carousel') {
+      const r = await generateCarouselDesign({ brand, design: { ...design, output: { ...design.output, type, scale: scale || 1, video, gif, still: still !== false } }, generate, onProgress });
+      return { dir: path.relative(ROOT, r.dir), absDir: r.dir, total: r.total, ads: r.manifests.map(withUrls) };
+    }
     if (mode === 'bulk') {
       const r = await generateBatch({ ...common, rows, shared: content, onProgress });
       await keepDesign(r.dir);

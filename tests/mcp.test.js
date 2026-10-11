@@ -43,6 +43,26 @@ test('ChatGPT MCP edits keep actor, canvas view, activity and explicit export re
       assert.ok(tools.find((t) => t.name === name).inputSchema.required.includes('confirmed_by_user'));
     }
     assert.deepEqual(await fs.readdir(path.join(home, 'output')), []);
+    const emptyCarousel = await call('update_editor', { mode: 'carousel', show: false });
+    assert.equal(emptyCarousel.isError, true);
+    assert.match(emptyCarousel.content[0].text, /Build or open a carousel/);
+    const slides = Array.from({ length: 3 }, (_, i) => ({ id: `slide-${i}`, content: { headline: `Slide ${i + 1}`, cta: i === 2 ? 'Contact us' : '', slideNumber: i + 1, slideCount: 3, slideRole: i === 0 ? 'hook' : i === 2 ? 'cta' : 'story' }, templates: ['headline'], palettes: workspace.design.palettes }));
+    const design = { ...workspace.design, mode: 'carousel', slides, slideIndex: 0, content: slides[0].content, templates: slides[0].templates, variants: [] };
+    await fs.writeFile(path.join(home, 'data/workspace.json'), JSON.stringify({ ...workspace, design }));
+    const updated = await call('update_editor', { focus: { row: 1 }, content: { headline: 'AI changed the selected slide', align: 'center' }, templates: ['insight'], show: false });
+    assert.ok(!updated.isError);
+    const sequence = json(await call('get_editor', { image: false }));
+    assert.equal(sequence.design.mode, 'carousel');
+    assert.equal(sequence.design.slideIndex, 1);
+    assert.equal(sequence.design.slides[1].content.headline, 'AI changed the selected slide');
+    assert.equal(sequence.design.slides[1].templates[0], 'insight');
+    assert.deepEqual(sequence.design.slides[0].content, slides[0].content);
+    assert.deepEqual(sequence.design.slides[2], slides[2]);
+    await call('update_editor', { mode: 'single', content: { headline: 'Separate single ad' }, show: false });
+    await call('update_editor', { mode: 'carousel', show: false });
+    const reopened = json(await call('get_editor', { image: false }));
+    assert.equal(reopened.design.content.headline, 'AI changed the selected slide');
+    assert.deepEqual(reopened.design.slides[2], slides[2]);
   } finally {
     await client.close();
     await fs.rm(home, { recursive: true, force: true });

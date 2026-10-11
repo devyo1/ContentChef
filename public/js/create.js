@@ -10,6 +10,8 @@ import { Icon } from './icons.js';
 import { glowColors } from './color.js';
 import { assistantName } from './assistant.js';
 import { BackgroundGenerator } from './image-generation.js';
+import { commitCarousel, selectCarouselSlide, carouselAds } from './carousel-design.js';
+import { CarouselBuilderControls } from './carousel-builder.js';
 
 export const PLATFORM_GROUPS = [
   ['Instagram', ['ig-square', 'ig-portrait', 'story']],
@@ -84,7 +86,7 @@ function defaults(brand, meta, settings) {
 function sanitize(d, brand, meta) {
   const ok = (list, valid, fallback) => { const l = (list ?? []).filter((x) => valid.includes(x)); return l.length ? l : fallback; };
   const pals = Object.keys(brand.palettes);
-  return {
+  return commitCarousel({
     ...d,
     templates: ok(d.templates, meta.templates.map((t) => t.id), ['headline']),
     palettes: ok(d.palettes, pals, [pals[0]]),
@@ -92,7 +94,7 @@ function sanitize(d, brand, meta) {
     // "Several" whenever more than one is selected (e.g. Claude picked several), else what the user chose.
     pick: Object.fromEntries(['templates', 'palettes'].map((k) => [k, (d[k]?.length ?? 0) > 1 ? 'many' : d.pick?.[k] ?? 'one'])),
     output: { type: 'png', scale: 1, video: false, still: true, ...d.output },
-  };
+  });
 }
 
 /**
@@ -186,8 +188,8 @@ function useDesign() {
     return () => removeEventListener('keydown', onKey);
   });
 
-  const set = (patch) => setD((prev) => ({ ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) }));
-  const setContent = (patch) => setD((prev) => ({ ...prev, content: nonEmpty({ ...prev.content, ...patch }) }));
+  const set = (patch) => setD((prev) => commitCarousel({ ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) }));
+  const setContent = (patch) => setD((prev) => commitCarousel({ ...prev, content: nonEmpty({ ...prev.content, ...patch }) }));
   return [d, set, setContent, focus, setFocus, history];
 }
 
@@ -267,9 +269,10 @@ function WordsStep({ d, set, setContent, extras, usedFields }) {
   const count = bulk ? d.rows.filter(hasCopy).length : 1 + d.variants.filter((v) => v.trim()).length;
   return html`
     <${Section} n="1" title="Words" hint=${bulk ? `${plural(count, 'ad')} in your list` : 'What your ad says'}>
-      <${Segmented} value=${d.mode} onChange=${(mode) => set({ mode })}
-        options=${[{ value: 'single', label: 'One ad' }, { value: 'bulk', label: 'Many ads (bulk)' }]} />
-      <${WriteWithAssistant} d=${d} set=${set} />
+      <${Segmented} value=${d.mode} onChange=${(mode) => set(prev => mode === 'carousel' && !prev.slides?.length ? { mode, variants: [], templates: ['carousel-slide'], formats: [prev.formats[0] || 'ig-portrait'], carousel: {}, slides: [] } : mode === 'carousel' ? { ...selectCarouselSlide(prev, prev.slideIndex ?? 0), mode } : { mode })}
+        options=${[{ value: 'single', label: 'One ad' }, { value: 'bulk', label: 'Bulk ads' }, { value: 'carousel', label: 'Carousel' }]} />
+      ${d.mode === 'carousel' ? html`<${CarouselBuilderControls} d=${d} set=${set} />` : html`<${WriteWithAssistant} d=${d} set=${set} />`}
+      ${d.mode === 'carousel' && html`<p class="tip">${d.slides?.length ? `Editing slide ${(d.slideIndex ?? 0) + 1} of ${d.slides.length}. Words, Look, Motion and canvas edits affect only this slide. Sizes apply to the whole carousel.` : 'Build a story from a brief or website to start your carousel.'}</p>`}
       ${bulk
         ? html`
           <${BulkTable} rows=${d.rows} setRows=${(rows) => set({ rows })} fields=${usedFields} />
@@ -282,7 +285,7 @@ function WordsStep({ d, set, setContent, extras, usedFields }) {
         : html`
           <${TextField} label="Top line" hint="small text above" value=${c.eyebrow} placeholder="New this season" onInput=${(v) => setContent({ eyebrow: v })} />
           <${TextField} label="Headline" rows="2" value=${c.headline} placeholder="Say it *big*." onInput=${(v) => setContent({ headline: v })}
-            hint=${html`<button type="button" class="mini-add" title="Add another headline version (each one becomes its own ad)"
+            hint=${d.mode !== 'carousel' && html`<button type="button" class="mini-add" title="Add another headline version (each one becomes its own ad)"
               onClick=${(e) => { e.preventDefault(); set((prev) => ({ variants: [...prev.variants, ''] })); }}><${Icon} name="plus" size=${13} /></button>`} />
           <p class="tip">Tip: wrap words in <code>*stars*</code> to colour them, use <code>|</code> to force a new line.</p>
           ${d.variants.length > 0 && html`<div class="versions-head"><b>Headline versions</b><span class="muted">each one becomes its own ad</span>
@@ -293,7 +296,7 @@ function WordsStep({ d, set, setContent, extras, usedFields }) {
               <button class="icon-btn" onClick=${() => set({ variants: d.variants.filter((_, j) => j !== i) })} title="Remove"><${Icon} name="x" size=${14} /></button>
             </div>`)}
           <${TextField} label="Supporting line" rows="2" value=${c.subhead} placeholder="One line that sells it." onInput=${(v) => setContent({ subhead: v })} />
-          <${TextField} label="Button text" value=${c.cta} placeholder="Shop now" onInput=${(v) => setContent({ cta: v })} />`}
+          ${(d.mode !== 'carousel' || d.slideIndex === d.slides?.length - 1) && html`<${TextField} label="Button text" value=${c.cta} placeholder="Shop now" onInput=${(v) => setContent({ cta: v })} />`}`}
       ${extras.length > 0 && html`
         <div class="subgroup">
           <h4>For your chosen templates</h4>
@@ -760,7 +763,7 @@ function CanvasView({ d, ads, onPick, lead, exporter }) {
   const drag = useRef(null);
   const moved = useRef(false);
   const groups = [];
-  for (const [row, ad] of ads.entries()) for (const template of d.templates) for (const palette of d.palettes) groups.push({ ...ad, row, template, palette });
+  for (const [row, ad] of ads.entries()) for (const template of (ad.templates ?? d.templates)) for (const palette of (ad.palettes ?? d.palettes)) groups.push({ ...ad, row, template, palette });
   const LIMIT = 90;
   const perGroup = Math.max(1, d.formats.length);
   const shown = groups.slice(0, Math.max(1, Math.floor(LIMIT / perGroup)));
@@ -1030,7 +1033,7 @@ function Stage({ d, set, setContent, previewContent, focus, setFocus, ads, selec
   const tname = (id) => meta.templates.find((t) => t.id === id)?.name ?? id;
   // Every variation (ad × template × colourway), shown at the focused size in a rail down the left.
   const combos = [];
-  for (let row = 0; row < ads.length; row++) for (const template of d.templates) for (const palette of d.palettes) combos.push({ row, template, palette });
+  for (let row = 0; row < ads.length; row++) for (const template of (ads[row].templates ?? d.templates)) for (const palette of (ads[row].palettes ?? d.palettes)) combos.push({ row, template, palette });
   const RAIL_MAX = 60;
   const comboLabel = (c) => [ads.length > 1 && ads[c.row].label, d.templates.length > 1 && tname(c.template), d.palettes.length > 1 && c.palette].filter(Boolean);
   const rail = combos.length > 1 && fmt;
@@ -1246,7 +1249,10 @@ function SaveModal({ d, onClose }) {
   const save = async () => {
     try {
       const shared = { templates: d.templates, palettes: d.palettes, formats: d.formats };
-      if (d.mode === 'bulk') {
+      if (d.mode === 'carousel') {
+        const saved = await api('PUT', `/api/carousels/${d.carousel.id}/design`, { revision: d.carousel.revision, design: { ...commitCarousel(d), campaign: name } });
+        dispatchEvent(new CustomEvent('chef:carousel-saved', { detail: saved }));
+      } else if (d.mode === 'bulk') {
         await api('PUT', `/api/catalog/${encodeURIComponent(name)}`, {
           brand: brand.id, campaign: d.campaign || name, defaults: { ...shared, content: d.content }, items: d.rows.filter(hasCopy).map((r) => nonEmpty(r)),
         });
@@ -1261,7 +1267,7 @@ function SaveModal({ d, onClose }) {
   };
   return html`
     <${Modal} title="Save for later" onClose=${onClose}>
-      <p class="muted">${d.mode === 'bulk' ? 'Saves the whole list and its settings as a campaign.' : 'Adds this ad to a campaign (created if new). Re-render it anytime from Saved & exports.'}</p>
+      <p class="muted">${d.mode === 'carousel' ? 'Saves every slide with its layouts, styling and motion. Reopen from Create → Carousel → Saved carousels.' : d.mode === 'bulk' ? 'Saves the whole list and its settings as a campaign.' : 'Adds this ad to a campaign (created if new). Re-render it anytime from Saved & exports.'}</p>
       <${Field} label="Campaign name"><input value=${name} onInput=${(e) => setName(e.target.value)} /><//>
       <div class="row end"><button class="btn primary" onClick=${save}>Save</button></div>
     <//>`;
@@ -1271,10 +1277,10 @@ function ExportPanel({ d, set, rows, exporter }) {
   const { brand } = useApp();
   const { job, start: startJob, setPopup } = exporter;
   const [saving, setSaving] = useState(false);
-  const animated = isAnimated(d.content);
+  const animated = d.mode === 'carousel' ? carouselAds(d).some(a => isAnimated(a.content)) : isAnimated(d.content);
   const o = d.output;
-  const ads = d.mode === 'bulk' ? rows.length : 1 + d.variants.filter((v) => v.trim()).length;
-  const combos = ads * d.templates.length * d.palettes.length * d.formats.length;
+  const ads = d.mode === 'carousel' ? d.slides.length : d.mode === 'bulk' ? rows.length : 1 + d.variants.filter((v) => v.trim()).length;
+  const combos = d.mode === 'carousel' ? carouselAds(d).reduce((sum, s) => sum + s.templates.length * s.palettes.length * d.formats.length, 0) : ads * d.templates.length * d.palettes.length * d.formats.length;
   const video = animated && o.video;
   const still = !video || o.still;
   const gif = animated && !!o.gif;
@@ -1284,6 +1290,7 @@ function ExportPanel({ d, set, rows, exporter }) {
   const start = () => {
     if (!d.formats.length) return toast('Pick at least one size', 'err');
     if (d.mode === 'bulk' && !rows.length) return toast('Add some ads to the list first', 'err');
+    if (d.mode === 'carousel' && !d.slides.length) return toast('Build your carousel first', 'err');
     const headlines = [d.content.headline, ...d.variants.filter((v) => v.trim())];
     const content = { ...d.content, ...(Object.keys(d.captions).length && d.mode === 'single' ? { captions: d.captions } : {}) };
     return startJob({
@@ -1302,7 +1309,7 @@ function ExportPanel({ d, set, rows, exporter }) {
       <h3>Export</h3>
       <div class="summary">
         <b>${plural(files, 'file')}</b>
-        <span>${d.mode === 'single' && ads > 1 ? `${ads} headline versions` : plural(ads, 'ad')} × ${plural(d.templates.length, 'template')} × ${plural(d.palettes.length, 'colour')} × ${plural(d.formats.length, 'size')}${video ? (still ? ' · images + videos' : ' · videos') : ''}</span>
+        <span>${d.mode === 'carousel' ? `${plural(ads, 'slide')} in reading order · individual layouts · ${plural(d.formats.length, 'size')}` : `${d.mode === 'single' && ads > 1 ? `${ads} headline versions` : plural(ads, 'ad')} × ${plural(d.templates.length, 'template')} × ${plural(d.palettes.length, 'colour')} × ${plural(d.formats.length, 'size')}`}${video ? (still ? ' · images + videos' : ' · videos') : ''}</span>
       </div>
       <${Field} label="Campaign name" hint="folder name"><input value=${d.campaign} onInput=${(e) => set({ campaign: e.target.value })} placeholder="autumn-launch" /><//>
       <${Field} label="File type">
@@ -1330,7 +1337,7 @@ function ExportPanel({ d, set, rows, exporter }) {
           </div>
         </div>`}
       ${job?.status === 'error' && html`<p class="error">${job.error}</p>`}
-      <button class="btn ghost wide" onClick=${() => setSaving(true)}>Save for later</button>
+      <button class="btn ghost wide" disabled=${d.mode === 'carousel' && !d.slides.length} onClick=${() => setSaving(true)}>Save for later</button>
       <p class="faint small center">Tip: in Canvas view, right-click any ad to export just that one.</p>
       ${saving && html`<${SaveModal} d=${d} onClose=${() => setSaving(false)} />`}
     </div>`;
@@ -1413,17 +1420,20 @@ export function CreatePage() {
   const [d, set, setContent, focusState, setFocusState, history] = useDesign();
   const rows = useMemo(() => d.rows.filter(hasCopy).map((r) => nonEmpty(r)), [d.rows]);
   // Every ad being made: the rows of a bulk list, or the main headline plus its versions.
-  const ads = useMemo(() => (d.mode === 'bulk'
+  const ads = useMemo(() => (d.mode === 'carousel' && d.slides?.length ? carouselAds(d) : d.mode === 'bulk'
     ? (rows.length ? rows : [{ headline: 'Add ads to your list' }]).map((r, i) => ({ label: `Ad ${i + 1}`, content: { ...d.content, ...r } }))
     : [d.content.headline, ...d.variants.filter((v) => v.trim())].map((h, i) => ({ label: i ? `Version ${i + 1}` : 'Main', content: { ...d.content, headline: h } }))),
-  [d.mode, rows, d.content, d.variants]);
+  [d.mode, rows, d.content, d.variants, d.slides]);
   const focus = {
     template: d.templates.includes(focusState.template) ? focusState.template : d.templates[0],
     palette: d.palettes.includes(focusState.palette) ? focusState.palette : d.palettes[0],
     format: d.formats.includes(focusState.format) ? focusState.format : d.formats[0],
-    row: Math.max(0, Math.min(focusState.row ?? 0, ads.length - 1)),
+    row: d.mode === 'carousel' ? d.slideIndex ?? 0 : Math.max(0, Math.min(focusState.row ?? 0, ads.length - 1)),
   };
-  const setFocus = (p) => setFocusState({ ...focus, ...p });
+  const setFocus = (p) => {
+    if (d.mode === 'carousel' && p.row != null && p.row !== d.slideIndex) set(prev => selectCarouselSlide(prev, p.row));
+    setFocusState({ ...focus, ...p });
+  };
   const previewContent = ads[focus.row].content;
   const usedFields = new Set(meta.templates.filter((t) => d.templates.includes(t.id)).flatMap((t) => t.fields));
   const extras = Object.keys(EXTRA_FIELDS).filter((k) => usedFields.has(k));

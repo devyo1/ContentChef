@@ -10,12 +10,10 @@ import { ChatWidget } from './chat-ui.js';
 import { Icon } from './icons.js';
 import { assistantName, assistantProvider } from './assistant.js';
 import { NewBrandModal } from './new-brand.js';
-import { CarouselPage } from './carousel.js';
 
 const NAV = [
   ['home', 'grid', 'Dashboard'],
   ['create', 'sparkles', 'Create'],
-  ['carousel', 'layers', 'Carousel'],
   ['video', 'film', 'Video'],
   ['brands', 'palette', 'Brand kit'],
   ['saved', 'folder', 'Saved & exports'],
@@ -72,7 +70,7 @@ function App() {
   const [settings, setSettings] = useState(null);
   const [workspace, setWorkspace] = useState(null);
   const [error, setError] = useState(null);
-  const [tab, setTabState] = useState(store.get('tab', 'create'));
+  const [tab, setTabState] = useState(store.get('tab', 'create') === 'carousel' ? 'create' : store.get('tab', 'create'));
   const [brandId, setBrandId] = useState(store.get('brand', null));
   const [newBrand, setNewBrand] = useState(false);
   const [pending, setPending] = useState(null); // design handed from Saved → Create
@@ -172,13 +170,12 @@ function App() {
             ${window.desktop?.showLauncher && html`<button class="btn small ghost" onClick=${() => window.desktop.showLauncher()}>Launcher</button>`}
             <${AiActivity} />
             <button class="icon-btn" title=${dark ? 'Light mode' : 'Dark mode'} onClick=${() => saveSettings({ theme: dark ? 'light' : 'dark' })}><${Icon} name=${dark ? 'sun' : 'moon'} /></button>
-            <button class="ask-btn" onClick=${() => dispatchEvent(new Event(tab === 'carousel' ? 'chef:carousel-ai' : 'chef:chat'))}><span class="spark"><${Icon} name="sparkles" size=${13} stroke=${2} /></span>Ask ${assistantName(settings)}</button>
+            <button class="ask-btn" onClick=${() => dispatchEvent(new Event('chef:chat'))}><span class="spark"><${Icon} name="sparkles" size=${13} stroke=${2} /></span>Ask ${assistantName(settings)}</button>
           </div>
         </header>
         <div class="main">
           ${tab === 'home' && html`<${DashboardPage} />`}
           ${tab === 'create' && html`<${CreatePage} key=${brand.id} />`}
-          ${tab === 'carousel' && html`<${CarouselPage} key=${brand.id} />`}
           ${tab === 'video' && html`<${VideoPage} key=${brand.id} />`}
           ${tab === 'brands' && html`<${BrandsPage} key=${brand.id} />`}
           ${tab === 'saved' && html`<${SavedPage} />`}
@@ -187,7 +184,7 @@ function App() {
       </div>
       ${newBrand && html`<${NewBrandModal} settings=${settings} onClose=${() => setNewBrand(false)} onCreated=${async (id) => { await reload(); pickBrand(id); setNewBrand(false); setTab('brands'); }} />`}
       <a class="rcm-mark" href="https://realcitymedia.com" target="_blank" rel="noopener" title="Made by RealCityMedia">RCM</a>
-      ${tab !== 'carousel' && html`<${ChatWidget} key=${assistantProvider(settings)} />`}
+      <${ChatWidget} key=${assistantProvider(settings)} />
       <${Toasts} />
     <//>`;
 }

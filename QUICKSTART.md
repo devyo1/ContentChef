@@ -119,12 +119,12 @@ To keep a design to work on later, click **Save for later** in the Export panel,
 
 ## Make a swipe-through carousel
 
-1. Click **Carousel** at the top of the studio.
-2. Describe the story or advice you want to share. Choose **2–20 slides**; this total includes the opening slide and final call to action.
-3. Enter the final action, such as **Book your shoot**, and click **Build carousel**.
-4. Click any numbered slide to edit its words or appearance. To ask AI for a change, type under **Refine just this slide**, then click **Rewrite slide**. Check the preview and choose **Apply suggestion** or **Discard**.
-5. Click **Save slide** to keep your edits. Moving to another slide also saves your changes. Your carousels are available in the **Saved carousels** dropdown on this page.
-6. Click **Export all slides**. Open the folder or download the pictures, then upload `slide-01.png`, `slide-02.png` and the rest in that order when creating your social post.
+1. Click **Create**, then choose **Carousel** beside **One ad** and **Bulk ads** in the Words panel. Click **Build from a brief / website**.
+2. Describe the story or advice you want to share. Optionally enter your website so the AI can study its pages, styles and screenshots. Choose **2–20 slides**; this total includes the opening slide and final call to action.
+3. Enter the final action, such as **Book your shoot**, or choose **Dynamic ✦** to let AI tailor the CTA to your story and audience. Click **Build carousel**. You can edit the generated CTA on the final slide.
+4. Pick a slide from **Slide to edit**, the preview rail, or **Canvas**. Use the same **Words**, **Look**, **Motion**, text inspector, image tools and Undo as any other ad. Changes affect the selected slide; sizes apply to the whole carousel. **Rewrite slide** or **Ask ChatGPT / Claude** can help with an individual slide.
+5. Click **Save for later** to save the full carousel, including each slide’s styling. Reopen it from **Create → Carousel → Saved carousels**. Carousels made in the earlier editor can be opened here too.
+6. Use the main **Export** panel. The output folder contains files prefixed `slide-01_`, `slide-02_` and so on. Upload the files for your chosen size in that order.
 
 ## Next time you open Content Chef
 

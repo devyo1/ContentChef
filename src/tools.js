@@ -15,11 +15,13 @@ import {
 } from './core/index.js';
 import { generatePalette, HARMONIES, MOODS } from '../public/js/color.js';
 import { prepareBackground, generateBackground } from './background-images.js';
+import { selectCarouselSlide, carouselAds } from '../public/js/carousel-design.js';
+import { generateCarouselDesign } from './carousels.js';
 
 export const INSTRUCTIONS = `Content Chef: brand-consistent social content (ads and value posts) rendered at exact platform sizes as PNG/JPG stills and MP4 videos.
 
 HOW TO WORK (important): BUILD IN THE USER'S LIVE EDITOR, DON'T JUST CRANK OUT FILES.
-The user has the Content Chef builder open and wants to watch you work and then tweak the result themselves. When they ask you to make, create or design ads/posts/creatives:
+The user has the Content Chef builder open and wants to watch you work and then tweak the result themselves. In carousel mode, content/templates/palettes are the selected slide only. Keep mode "carousel" when editing a slide; use focus.row (zero-based) to select a different slide before editing it. All other slides must stay unchanged unless the user requests changes to them. The final slide must keep a CTA. When they ask you to make, create or design ads/posts/creatives:
 1. get_editor to see what they have open; list_brands if you need brand details.
 2. update_editor to put everything into their builder: copy (content), extra headline versions (variants) or several different ads (mode "bulk" + rows), templates, palettes and sizes. Use view: "canvas" when there are several variations so they see them all side by side; view: "focus" for one ad. Their screen updates instantly.
 3. Check your work with the image update_editor returns (or preview_ad) and refine with more update_editor calls.
@@ -477,7 +479,7 @@ function resolveFocus(design, focus = {}) {
     template: inList(focus.template, design.templates),
     palette: inList(focus.palette, design.palettes),
     format: inList(focus.format, design.formats),
-    row: Math.max(0, Math.min(focus.row ?? 0, rows.length - 1)),
+    row: design.mode === 'carousel' ? design.slideIndex ?? 0 : Math.max(0, Math.min(focus.row ?? 0, rows.length - 1)),
   };
 }
 
@@ -495,6 +497,8 @@ async function loadWorkspaceOrDefault(brandId) {
   const design = { ...structuredClone(DESIGN_DEFAULT), palettes: [Object.keys(b.palettes)[0]] };
   // Switching brand keeps the copy and layout choices; palettes reset to the new brand's.
   if (ws?.design) Object.assign(design, { ...ws.design, palettes: design.palettes });
+  // Saved carousel IDs and slide palettes belong to their original brand.
+  if (design.slides) { delete design.slides; delete design.carousel; delete design.slideIndex; if (design.mode === 'carousel') design.mode = 'single'; }
   return { brand: b.id, design, focus: ws?.focus ?? {} };
 }
 
@@ -503,13 +507,13 @@ async function snapshot(ws, { image: wantImage = true } = {}) {
   const d = ws.design;
   const focus = resolveFocus(d, ws.focus);
   const rows = (d.rows ?? []).filter(hasCopy);
-  const ads = d.mode === 'bulk' ? rows.length : 1 + (d.variants ?? []).filter((v) => v?.trim()).length;
+  const ads = d.mode === 'carousel' ? d.slides.length : d.mode === 'bulk' ? rows.length : 1 + (d.variants ?? []).filter((v) => v?.trim()).length;
   const info = {
     brand: { id: b.id, name: b.name, palettes: Object.keys(b.palettes), assets: b.assets },
     lastEditedBy: ['claude', 'assistant'].includes(ws.source) ? (ws.actor ?? 'assistant') : 'user',
     design: d,
     inFocus: { ...focus, ...(d.mode === 'bulk' ? { rowCopy: rows[focus.row] } : {}) },
-    willExport: `${ads} ad(s) x ${d.templates.length} template(s) x ${d.palettes.length} palette(s) x ${d.formats.length} size(s)`,
+    willExport: d.mode === 'carousel' ? `${ads} ordered slides, ${carouselAds(d).reduce((n, s) => n + s.templates.length * s.palettes.length * d.formats.length, 0)} design/size combinations` : `${ads} ad(s) x ${d.templates.length} template(s) x ${d.palettes.length} palette(s) x ${d.formats.length} size(s)`,
   };
   const out = [text(info)];
   if (wantImage && focus.format) {
@@ -536,12 +540,12 @@ tool('get_editor',
 tool('update_editor',
   `Change the design open in the Content Chef editor; the user's screen updates immediately. Only the fields you pass change.
 - content is merged into the current copy/options (headline, eyebrow, subhead, cta, offer, background, bgStyle, animation, duration, align...); list keys to remove in clear_fields.
-- mode "single" = one message (+ variants = extra headline versions); mode "bulk" = rows, each a separate ad, with content as the shared defaults.
+- mode "single" = one message (+ variants = extra headline versions); mode "bulk" = rows, each a separate ad, with content as the shared defaults. Mode "carousel" edits an existing carousel; focus.row selects the slide and content/templates/palettes affect only that slide.
 - focus picks which template/palette/size/row the user is looking at.
 Returns the updated design and a rendered image so you can check the result.`,
   {
     brand: z.string().optional().describe('Switch to (or start with) this brand'),
-    mode: z.enum(['single', 'bulk']).optional(),
+    mode: z.enum(['single', 'bulk', 'carousel']).optional(),
     content: Content.optional(),
     clear_fields: z.array(z.string()).optional().describe('Content keys to remove, e.g. ["background", "eyebrow"]'),
     variants: z.array(z.string()).optional().describe('Single mode: extra headline versions (replaces the list)'),
@@ -556,7 +560,15 @@ Returns the updated design and a rendered image so you can check the result.`,
   async (a) => {
     const ws = await loadWorkspaceOrDefault(a.brand);
     const b = await loadBrand(ws.brand);
-    const d = structuredClone(ws.design);
+    let d = structuredClone(ws.design);
+    if ((a.mode ?? d.mode) === 'carousel') {
+      if (!d.slides?.length && a.mode === 'carousel') throw new Error('Build or open a carousel in Create → Carousel first.');
+      const index = a.focus?.row ?? d.slideIndex ?? 0;
+      if (d.slides?.length || a.focus?.row != null) {
+        if (!d.slides?.[index]) throw new Error('That carousel slide does not exist.');
+        d = selectCarouselSlide(d, index);
+      }
+    }
     if (a.mode) d.mode = a.mode;
     if (a.content) d.content = dropEmpty({ ...d.content, ...a.content });
     for (const k of a.clear_fields ?? []) delete d.content[k];
@@ -591,6 +603,12 @@ tool('export_editor', 'ONLY WHEN THE USER EXPLICITLY ASKS TO EXPORT. Export the 
       brand: ws.brand, campaign: d.campaign || 'my-campaign', templates: d.templates, palettes: d.palettes, formats: d.formats,
       scale: o.scale || undefined, type: o.type ?? 'png', video, still: !video || o.still !== false,
     };
+    if (d.mode === 'carousel') {
+      const r = await generateCarouselDesign({ brand: ws.brand, design: d, generate });
+      const out = [text({ folder: rel(r.dir), files: r.total, order: 'Numbered slide files in reading order' })];
+      if (include_sheet) out.push(await sheetFor(r.manifests));
+      return out;
+    }
     if (d.mode === 'bulk') {
       const r = await generateBatch({ ...common, rows: (d.rows ?? []).filter(hasCopy).map(dropEmpty), shared: d.content });
       const out = [text({ folder: rel(r.dir), spreadsheet: rel(r.csv), files: r.total })];
