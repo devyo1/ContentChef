@@ -1,6 +1,6 @@
 // Dashboard: every brand at a glance (with a live preview of what you last made for it),
 // saved campaigns and recent exports, in one grid.
-import { html, useState, useEffect, api, store, useApp, AdFrame, plural } from './lib.js';
+import { html, useState, useEffect, api, store, useApp, AdFrame, plural, toast } from './lib.js';
 import { Icon } from './icons.js';
 
 const ago = (ms) => {
@@ -24,7 +24,18 @@ function brandPreview(brand, meta) {
 }
 
 export function DashboardPage() {
-  const { meta, pickBrand, setTab, openNewBrand } = useApp();
+  const { meta, pickBrand, setTab, openNewBrand, setPending } = useApp();
+  // Load an export's design back into the builder (exact design if saved with it, else rebuilt).
+  const reopen = async (e) => {
+    try {
+      const r = await api('GET', `/api/exports/design?dir=${encodeURIComponent(e.dir)}`);
+      if (!meta.brands.some((b) => b.id === r.brand)) throw new Error(`The brand "${r.brand}" no longer exists`);
+      setPending({ brand: r.brand, design: r.design });
+      pickBrand(r.brand);
+      setTab('create');
+      toast(r.from === 'saved' ? `Opened "${e.campaign}" in the builder` : `Opened "${e.campaign}" (rebuilt from the export)`);
+    } catch (err) { toast(err.message, 'err'); }
+  };
   const [cats, setCats] = useState(null);
   const [exportsList, setExports] = useState(null);
   useEffect(() => {
@@ -79,10 +90,16 @@ export function DashboardPage() {
       ${exportsList === null ? html`<p class="muted">Loading…</p>` : exportsList.length === 0
         ? html`<p class="muted small">No exports yet.</p>`
         : html`<div class="dash-exports">${exportsList.slice(0, 12).map((e) => html`
-            <button type="button" class="dash-export" key=${e.dir} onClick=${() => api('POST', '/api/open', { path: e.dir })} title="Open folder">
-              ${e.thumb ? html`<img src=${e.thumb} loading="lazy" />` : html`<span class="noimg"><${Icon} name="film" /></span>`}
+            <div class="dash-export" key=${e.dir}>
+              <button type="button" class="dash-export-pic" onClick=${() => reopen(e)} title="Open in the builder to reuse or change it">
+                ${e.thumb ? html`<img src=${e.thumb} loading="lazy" />` : html`<span class="noimg"><${Icon} name="film" /></span>`}
+              </button>
               <b class="ellipsis">${e.campaign}</b>
               <small class="muted">${meta.brands.find((b) => b.id === e.brand)?.name ?? e.brand} · ${plural(e.files, 'file')} · ${ago(e.modified)}</small>
-            </button>`)}</div>`}
+              <div class="row nowrap">
+                ${e.ads > 0 && html`<button class="btn small primary grow" onClick=${() => reopen(e)}><${Icon} name="sparkles" size=${13} /> Edit in builder</button>`}
+                <button class="icon-btn" title="Open folder" onClick=${() => api('POST', '/api/open', { path: e.dir })}><${Icon} name="folder" size=${15} /></button>
+              </div>
+            </div>`)}</div>`}
     </div></div>`;
 }

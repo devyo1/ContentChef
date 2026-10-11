@@ -46,7 +46,11 @@ Install, open, done. There's no terminal and nothing else to install. Your brand
 
 ## Claude can drive it
 
-Content Chef is an **MCP connector**, so Claude can see your design (including a rendered image), change it live in your editor, create templates, generate palettes, write copy and export.
+Content Chef is an **MCP connector**, so Claude (or ChatGPT, or any MCP client) can see your design (including a rendered image), change it live in your editor, create templates, generate palettes, write copy and export.
+
+- **You stay in the loop.** When you ask an AI for ads, it builds them in your open builder (copy, versions, templates, colours, sizes, Canvas view) so you watch it happen and tweak the result. It only renders files on its own when you explicitly ask for an export or background work.
+- **See what it's doing.** The **AI activity** pill in the top bar shows which AI is working and what it's doing, with a feed of recent actions.
+- **Reopen any export.** Exports remember the design that made them: on the Dashboard press **Edit in builder** to reuse or change one.
 
 - **In the app:** press **Ask Claude**. It connects through your Claude account via Claude Code (sign in once, no API key needed), or through an Anthropic API key.
 - **From Claude Desktop or Claude Code:** **Settings → Use Content Chef from the Claude apps** shows the exact command or config for your machine.

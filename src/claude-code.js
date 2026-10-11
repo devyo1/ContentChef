@@ -88,7 +88,9 @@ export function startClaudeLogin(override) {
 function mcpConfigFile() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   const file = path.join(DATA_DIR, 'mcp-config.json');
-  const config = { mcpServers: { 'content-chef': mcpLaunch() } };
+  const launch = mcpLaunch();
+  // Label the chat panel's own tool calls in the activity feed.
+  const config = { mcpServers: { 'content-chef': { ...launch, env: { ...(launch.env ?? {}), CONTENT_CHEF_ACTOR: 'Claude (chat)' } } } };
   fs.writeFileSync(file, JSON.stringify(config, null, 2));
   return file;
 }

@@ -714,6 +714,7 @@ function useQuickExport({ d, exporter, onFocus }) {
     exporter.start({
       mode: 'single', brand: brand.id, campaign: d.campaign || 'my-campaign', content: g.content,
       templates: [g.template], palettes: [g.palette], formats, type, scale: d.output.scale, video, gif, still,
+      design: { ...d, mode: 'single', content: g.content, variants: [], templates: [g.template], palettes: [g.palette], formats },
     }, {
       label: `${g.label} · ${tname(g.template)} · ${formats.length > 1 ? plural(formats.length, 'size') : SHORT[formats[0]] ?? formats[0]}`,
       total: formats.length * ((still ? 1 : 0) + (video ? 1 : 0) + (gif ? 1 : 0)),
@@ -982,6 +983,12 @@ function Inspector({ role, d, setContent, set, focus, onClose, scope, setScope, 
 function Stage({ d, set, setContent, previewContent, focus, setFocus, ads, selected, setSelected, history, exporter }) {
   const { meta, brand } = useApp();
   const [view, setView] = useState(store.get('stage.view', 'focus'));
+  // An AI can switch the view (e.g. to Canvas to show every variation it made).
+  useEffect(() => {
+    const onView = (e) => setView(e.detail);
+    addEventListener('chef:view', onView);
+    return () => removeEventListener('chef:view', onView);
+  }, []);
   useEffect(() => store.set('stage.view', view), [view]);
   const boxRef = useRef();
   const [box, setBox] = useState({ w: 600, h: 600 });
@@ -1278,6 +1285,7 @@ function ExportPanel({ d, set, rows, exporter }) {
       rows: d.mode === 'bulk' ? rows : undefined,
       templates: d.templates, palettes: d.palettes, formats: d.formats,
       type: o.type, scale: o.scale, video, gif, still,
+      design: d, // saved with the files so this export can be reopened in the builder
     }, { label: `${d.campaign || 'my-campaign'} · ${plural(files, 'file')}`, total: files });
   };
   const running = job?.status === 'running';

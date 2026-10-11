@@ -19,3 +19,4 @@ export * from './settings.js';
 export { EFFECTS, STYLE_ROLES, CTA_FX, LOOP_PERIODS } from './templates/base.js';
 export * from './launch.js';
 export { DECOR_PRESETS, sanitizeSvg } from './templates/decor.js';
+export * from './activity.js';

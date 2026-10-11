@@ -13,7 +13,7 @@ import {
   buildCaptions, listCatalogs, loadCatalog, saveCatalog, upsertItem, removeItem, renderCatalog,
   closeBrowser, getWorkspace, setWorkspace, getSettings, saveSettings, publicSettings,
   BRANDS_DIR, OUTPUT_DIR, CATALOG_DIR, DATA_DIR, TEMPLATES_DIR, ROOT, HOME, ensureWorkspace, mcpLaunch,
-  deleteAsset, assetPath, gifToMp4, CTA_FX, LOOP_PERIODS, DECOR_PRESETS, trimVideo, VIDEO_ASPECTS,
+  deleteAsset, assetPath, gifToMp4, getActivity, CTA_FX, LOOP_PERIODS, DECOR_PRESETS, trimVideo, VIDEO_ASPECTS,
 } from './core/index.js';
 import { runChat, resetChat, chatErrorMessage } from './chat.js';
 import { writeCopy, writeCaptions } from './copywriter.js';
@@ -123,14 +123,18 @@ function startJob(work) {
 }
 
 app.post('/api/jobs', api(async (req) => {
-  const { mode, brand, campaign, content, variants, rows, templates, palettes, formats, scale, type, video, gif, still, id } = req.body;
+  const { mode, brand, campaign, content, variants, rows, templates, palettes, formats, scale, type, video, gif, still, id, design } = req.body;
   const common = { brand, campaign: campaign || 'my-campaign', templates, palettes, formats, scale: scale || undefined, type, video, gif, still: still !== false };
+  // Keep the exact editor design next to the files, so the export can be reopened and changed later.
+  const keepDesign = (dir) => design && fs.writeFile(path.join(dir, 'design.json'), JSON.stringify({ brand, design, savedAt: Date.now() }, null, 2)).catch(() => {});
   const job = startJob(async (onProgress) => {
     if (mode === 'bulk') {
       const r = await generateBatch({ ...common, rows, shared: content, onProgress });
+      await keepDesign(r.dir);
       return { dir: path.relative(ROOT, r.dir), absDir: r.dir, csv: toUrl(r.csv), total: r.total, ads: r.manifests.map(withUrls) };
     }
     const m = await generate({ ...common, id, content, variants, onProgress });
+    await keepDesign(m.dir);
     return { dir: path.relative(ROOT, m.dir), absDir: m.dir, total: m.files.length, ads: [withUrls(m)] };
   });
   return { id: job.id };
@@ -205,6 +209,33 @@ app.get('/api/exports', api(async () => {
   return out.sort((a, b) => b.modified - a.modified);
 }));
 
+/**
+ * Reopen an export in the builder: the exact design saved with it (design.json), or, for older
+ * exports and ones Claude rendered in the background, one rebuilt from the manifests.
+ */
+app.get('/api/exports/design', api(async (req) => {
+  const dir = path.resolve(ROOT, String(req.query.dir ?? ''));
+  if (!dir.startsWith(OUTPUT_DIR + path.sep)) throw new Error('That is not an export folder');
+  const subdirs = async (d) => (await fs.readdir(d, { withFileTypes: true }).catch(() => [])).filter((e) => e.isDirectory()).map((e) => path.join(d, e.name));
+  const readJson = async (f) => JSON.parse(await fs.readFile(f, 'utf8'));
+  let saved = null;
+  for (const d of [dir, ...(await subdirs(dir))]) {
+    const j = await readJson(path.join(d, 'design.json')).catch(() => null);
+    if (j?.design && (!saved || j.savedAt > saved.savedAt)) saved = j;
+  }
+  if (saved) return { brand: saved.brand, design: saved.design, from: 'saved' };
+  const manifests = (await Promise.all((await subdirs(dir)).map((d) => readJson(path.join(d, 'manifest.json')).catch(() => null)))).filter(Boolean)
+    .sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
+  if (!manifests.length) throw new Error('No ads found in this export');
+  const m = manifests[0];
+  const shared = { templates: m.templates, palettes: m.palettes, formats: m.formats, campaign: m.campaign };
+  const bulk = manifests.length > 1 && await fs.access(path.join(dir, 'campaign.csv')).then(() => true, () => false);
+  const design = bulk
+    ? { mode: 'bulk', content: {}, rows: manifests.reverse().map((x) => x.copy?.[0] ?? {}), ...shared }
+    : { mode: 'single', content: m.copy?.[0] ?? {}, variants: (m.copy ?? []).slice(1).map((c) => c.headline).filter(Boolean), ...shared };
+  return { brand: m.brand, design, from: 'manifest' };
+}));
+
 // ── Saved campaigns (catalogs) ──────────────────────────────────────────────
 
 app.get('/api/catalogs', api(() => listCatalogs()));
@@ -235,17 +266,23 @@ app.get('/api/events', (req, res) => {
 const broadcast = (data) => { for (const c of clients) c.write(`data: ${JSON.stringify(data)}\n\n`); };
 
 function watchDir(dir, opts, onChange) {
-  let timer;
+  // Debounce per file, so a change to one file (e.g. the activity log) never swallows another (the workspace).
+  const timers = new Map();
   fs.mkdir(dir, { recursive: true }).then(() => {
     try {
-      watch(dir, opts, (_e, file) => { clearTimeout(timer); timer = setTimeout(() => onChange(String(file ?? '')), 150); });
+      watch(dir, opts, (_e, file) => {
+        const f = String(file ?? '');
+        clearTimeout(timers.get(f));
+        timers.set(f, setTimeout(() => { timers.delete(f); onChange(f); }, 150));
+      });
     } catch (e) { console.warn(`Not watching ${dir}: ${e.message}`); }
   });
 }
 watchDir(DATA_DIR, {}, async (file) => {
+  if (file.startsWith('activity.json')) return broadcast({ type: 'activity' });
   if (!file.startsWith('workspace.json')) return;
   const ws = await getWorkspace();
-  if (ws) broadcast({ type: 'workspace', source: ws.source, updatedAt: ws.updatedAt });
+  if (ws) broadcast({ type: 'workspace', source: ws.source, actor: ws.actor, view: ws.view, updatedAt: ws.updatedAt });
 });
 watchDir(BRANDS_DIR, { recursive: true }, (file) => { if (!file.includes('.cache')) broadcast({ type: 'meta' }); });
 watchDir(CATALOG_DIR, {}, () => broadcast({ type: 'catalogs' }));
@@ -254,6 +291,8 @@ watchDir(TEMPLATES_DIR, {}, () => broadcast({ type: 'meta' })); // custom templa
 // ── Shared workspace (what's open in the editor) ────────────────────────────
 
 app.get('/api/workspace', api(async () => (await getWorkspace()) ?? {}));
+// What connected AIs (Claude, ChatGPT…) have been doing, newest last.
+app.get('/api/activity', api(() => getActivity()));
 app.put('/api/workspace', api(async (req) => {
   const { brand, design, focus, source } = req.body;
   const ws = await setWorkspace({ brand, design, focus, source });

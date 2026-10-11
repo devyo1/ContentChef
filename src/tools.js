@@ -17,19 +17,20 @@ import { generatePalette, HARMONIES, MOODS } from '../public/js/color.js';
 
 export const INSTRUCTIONS = `Content Chef: brand-consistent social content (ads and value posts) rendered at exact platform sizes as PNG/JPG stills and MP4 videos.
 
-THE LIVE EDITOR: the user may have Content Chef open. get_editor shows exactly what they're looking at (the design plus a rendered image of the ad in focus). update_editor changes that design and it updates on their screen instantly; prefer it when the user talks about "this ad", "my design", "make it bluer" etc. export_editor renders it like pressing Export.
+HOW TO WORK (important): BUILD IN THE USER'S LIVE EDITOR, DON'T JUST CRANK OUT FILES.
+The user has the Content Chef builder open and wants to watch you work and then tweak the result themselves. When they ask you to make, create or design ads/posts/creatives:
+1. get_editor to see what they have open; list_brands if you need brand details.
+2. update_editor to put everything into their builder: copy (content), extra headline versions (variants) or several different ads (mode "bulk" + rows), templates, palettes and sizes. Use view: "canvas" when there are several variations so they see them all side by side; view: "focus" for one ad. Their screen updates instantly.
+3. Check your work with the image update_editor returns (or preview_ad) and refine with more update_editor calls.
+4. Finish by telling them it's ready in the builder, what you made, and that they can tweak it or ask you to export.
+Do NOT render or export files (generate_ads, generate_bulk, export_editor, render_catalog) unless the user EXPLICITLY asks for files: "export", "render the files", "download", "make the PNGs/videos", "do it in the background". Those tools require confirmed_by_user: true, and only set it when the user actually said so. Even then, generate_ads / generate_bulk also load the set into the builder so the user can see it.
 
-Typical workflow:
-1. list_brands → brands with palettes, fonts, style, caption voice and media assets. Create/tweak with save_brand; add colourways from list_palette_library with add_library_palette.
-2. preview_ad renders ONE ad and returns the image (or, for animations, a filmstrip of frames) so you can look and iterate cheaply.
-3. generate_ads renders variants × templates × palettes × formats for one message (optionally MP4s too) with per-platform captions, and returns a contact sheet.
-4. generate_bulk renders MANY different messages (rows) with shared settings, plus a campaign.csv listing every file with copy and caption.
-5. Save reusable campaigns with add_catalog_item / save_campaign, re-render with render_catalog.
+Other tools: save_brand / add_library_palette / generate_palettes for brand colours, build_captions for captions, add_catalog_item / save_campaign to save campaigns for later, save_template to design new layouts.
 
 Copy markup inside headline/subhead/offer: *word* = accent colour, _word_ = italic, "|" = forced line break.
 Headlines auto-size to fill their space: shorter headlines look bolder (aim for 2–7 words).
 Templates: PROMO headline, stack, split, frame, offer, event (big calendar date + time/place), ticket (event ticket with stub), menu ("Name: price" list) · VALUE/EDUCATION insight (headline + paragraph), list (numbered tips), stat (big number + source), compare (myth vs fact), carousel (carousel cover slide with swipe cue), newspaper (front page), quote, minimal · SOCIAL-NATIVE textpost (X/Threads post), notes (iPhone Notes), chat (iMessage conversation: points "me:"/"them:", headline = final reply), poll (question + 2–4 options), lockscreen (iOS notification), glass (liquid glass), marker (highlighter captions) · PHOTO photo-story, photo-card, polaroid, cover (magazine), spotlight (product in a circle with a text ring + price sticker). Value posts use body / points / stat fields and a quiet text link instead of a button: prefer them for educational, helpful, non-salesy content.
-Motion (content.animation): none, fade-up, typewriter, word-rise, pop, wipe. Effects (content.effects, combinable with any motion or a still): glimmer, holo. The lockscreen template has its own iOS-style animation whenever motion is on. Set video:true on generate tools to get MP4s.
+Motion (content.animation): none, fade-up, typewriter, word-rise, pop, wipe. Effects (content.effects, combinable with any motion or a still): glimmer, holo. The lockscreen template has its own iOS-style animation whenever motion is on. The builder previews motion live; MP4s are made on export (output.video in update_editor).
 Per-element styling (content.styles): override colour, font, weight, size, letter spacing or case of headline / eyebrow / subhead / cta / logo etc. without touching the brand.
 Backgrounds: content.background = brand asset image or video (B-roll), else content.bgStyle = solid | gradient | aurora | spotlight | grid | dots.
 Colour: generate_palettes makes harmonious, contrast-checked palettes (optionally around locked colours); save one with save_brand.
@@ -164,6 +165,33 @@ const manifestSummary = (m) => ({
 });
 
 const outputOpts = ({ video, gif, still, scale, jpg }) => ({ video: !!video, gif: !!gif, still: still !== false, scale, type: jpg ? 'jpeg' : 'png' });
+
+// File-rendering tools need a deliberate yes: the default is to build in the live editor.
+const Confirmed = z.literal(true).describe('Set to true ONLY if the user explicitly asked for files / an export / background rendering in this conversation. Otherwise use update_editor and let them review in the builder.');
+
+/** Who is driving (shown in the editor's activity feed and on AI edits). Set by the MCP server per client. */
+let ACTOR = 'Claude';
+export function setActor(name) { ACTOR = name || 'AI'; }
+
+/** Load a set into the user's builder so they can see (and later tweak) what is being rendered. */
+async function showInEditor({ brand, mode, content, variants, rows, templates, palettes, formats, campaign, view }) {
+  try {
+    const ws = await loadWorkspaceOrDefault(brand);
+    const b = await loadBrand(ws.brand);
+    const d = structuredClone(ws.design);
+    d.mode = mode;
+    d.content = dropEmpty({ ...content });
+    if (mode === 'single') d.variants = variants ?? [];
+    if (rows) d.rows = rows.map(({ id, ...r }) => dropEmpty(r));
+    if (templates?.length) d.templates = templates;
+    const pals = (palettes ?? []).includes('all') ? Object.keys(b.palettes) : (palettes ?? []).filter((p) => b.palettes[p]);
+    if (pals.length) d.palettes = pals;
+    if (formats) d.formats = resolveFormats(formats);
+    if (campaign) d.campaign = campaign;
+    const many = (variants?.length ?? 0) > 0 || (rows?.length ?? 0) > 1 || d.templates.length > 1 || d.palettes.length > 1;
+    await setWorkspace({ brand: b.id, design: d, focus: ws.focus, source: 'claude', actor: ACTOR, view: view ?? (many ? 'canvas' : 'focus') });
+  } catch { /* showing it is a courtesy; never block the render */ }
+}
 
 // ── Brands, palettes, fonts ─────────────────────────────────────────────────
 
@@ -382,15 +410,18 @@ tool('preview_ad',
   });
 
 tool('generate_ads',
-  'Render ONE message as every combination of copy variants × templates × palettes × formats (images, plus MP4s when video:true), with captions.md/json and manifest.json. Returns file list, captions and a contact sheet.',
+  `BACKGROUND RENDER, ONLY WHEN THE USER EXPLICITLY ASKED FOR FILES (export / render / download / "in the background"). For normal "make me an ad" requests build it in the live editor with update_editor instead.
+Renders ONE message as every combination of copy variants × templates × palettes × formats (images, plus MP4s when video:true), with captions.md/json and manifest.json, and also loads the set into the user's builder. Returns file list, captions and a contact sheet.`,
   {
+    confirmed_by_user: Confirmed,
     brand: z.string(), content: Content,
     variants: z.array(Content).optional().describe('Copy variants (A/B tests); each is merged over `content`'),
     ...RenderSet, ...Output,
     campaign: z.string().optional().describe('Output folder grouping, e.g. "autumn-2026"'),
     id: z.string().optional().describe('Name for this ad; defaults to a slug of the headline'),
   },
-  async ({ brand, content, variants, templates, palettes, formats, campaign, id, include_sheet, ...o }) => {
+  async ({ confirmed_by_user, brand, content, variants, templates, palettes, formats, campaign, id, include_sheet, ...o }) => {
+    await showInEditor({ brand, mode: 'single', content, variants: (variants ?? []).map((v) => v.headline).filter(Boolean), templates, palettes, formats, campaign });
     const m = await generate({ brand, content, variants, templates, palettes, formats, campaign: campaign ?? 'adhoc', id, ...outputOpts(o) });
     const out = [text(manifestSummary(m))];
     if (include_sheet) out.push(await sheetFor([m]));
@@ -398,15 +429,18 @@ tool('generate_ads',
   });
 
 tool('generate_bulk',
-  'Render MANY different ads at once: each row is one message (headline, subhead, cta, eyebrow, offer…), rendered with the same templates/palettes/formats. `shared` fills fields a row leaves out. Also writes campaign.csv (every file with its copy + caption) for ad-manager uploads.',
+  `BACKGROUND RENDER, ONLY WHEN THE USER EXPLICITLY ASKED FOR FILES. For normal requests put the rows into the live editor with update_editor (mode "bulk", rows, view "canvas") instead.
+Renders MANY different ads at once: each row is one message (headline, subhead, cta, eyebrow, offer…), rendered with the same templates/palettes/formats. \`shared\` fills fields a row leaves out. Also writes campaign.csv (every file with its copy + caption) for ad-manager uploads, and loads the rows into the user's builder.`,
   {
+    confirmed_by_user: Confirmed,
     brand: z.string(),
     rows: z.array(Content.extend({ id: z.string().optional() })).min(1),
     shared: Content.optional().describe('Copy/options applied to every row (e.g. cta, eyebrow, animation, background)'),
     ...RenderSet, ...Output,
     campaign: z.string().describe('Campaign folder name'),
   },
-  async ({ brand, rows, shared, templates, palettes, formats, campaign, include_sheet, ...o }) => {
+  async ({ confirmed_by_user, brand, rows, shared, templates, palettes, formats, campaign, include_sheet, ...o }) => {
+    await showInEditor({ brand, mode: 'bulk', content: shared ?? {}, rows, templates, palettes, formats, campaign, view: 'canvas' });
     const r = await generateBatch({ brand, campaign, rows, shared: shared ?? {}, templates, palettes, formats, ...outputOpts(o) });
     const out = [text({ folder: rel(r.dir), spreadsheet: rel(r.csv), files: r.total, ads: r.manifests.map((m) => ({ id: m.id, files: m.files.length })) })];
     if (include_sheet) out.push(await sheetFor(r.manifests));
@@ -459,7 +493,7 @@ async function snapshot(ws, { image: wantImage = true } = {}) {
   const ads = d.mode === 'bulk' ? rows.length : 1 + (d.variants ?? []).filter((v) => v?.trim()).length;
   const info = {
     brand: { id: b.id, name: b.name, palettes: Object.keys(b.palettes), assets: b.assets },
-    lastEditedBy: ws.source === 'claude' ? 'claude' : 'user',
+    lastEditedBy: ws.source === 'claude' ? (ws.actor ?? 'claude') : 'user',
     design: d,
     inFocus: { ...focus, ...(d.mode === 'bulk' ? { rowCopy: rows[focus.row] } : {}) },
     willExport: `${ads} ad(s) x ${d.templates.length} template(s) x ${d.palettes.length} palette(s) x ${d.formats.length} size(s)`,
@@ -503,6 +537,7 @@ Returns the updated design and a rendered image so you can check the result.`,
     campaign: z.string().optional(),
     output: z.object({ type: z.enum(['png', 'jpeg']).optional(), scale: z.number().min(1).max(3).optional(), video: z.boolean().optional(), still: z.boolean().optional() }).optional(),
     focus: z.object({ template: z.string().optional(), palette: z.string().optional(), format: z.string().optional(), row: z.number().int().min(0).optional() }).optional(),
+    view: z.enum(['focus', 'canvas']).optional().describe('Switch the builder to Focus (one ad, big) or Canvas (every variation side by side). Use canvas when you made several versions/rows/templates.'),
     show: z.boolean().default(true).describe('Return a rendered image of the result'),
   },
   async (a) => {
@@ -526,12 +561,12 @@ Returns the updated design and a rendered image so you can check the result.`,
     if (a.campaign) d.campaign = a.campaign;
     if (a.output) d.output = { ...d.output, ...a.output };
     const focus = { ...ws.focus, ...(a.focus ?? {}) };
-    const saved = await setWorkspace({ brand: b.id, design: d, focus, source: 'claude' });
+    const saved = await setWorkspace({ brand: b.id, design: d, focus, source: 'claude', actor: ACTOR, view: a.view });
     return a.show ? snapshot(saved) : text('Editor updated.');
   });
 
-tool('export_editor', 'Export the design open in the editor exactly as the Export button would (all ads x templates x palettes x sizes, plus videos if enabled in its output settings). Returns files and a contact sheet.',
-  { include_sheet: z.boolean().default(true) },
+tool('export_editor', 'ONLY WHEN THE USER EXPLICITLY ASKS TO EXPORT. Export the design open in the editor exactly as the Export button would (all ads x templates x palettes x sizes, plus videos if enabled in its output settings). Returns files and a contact sheet.',
+  { confirmed_by_user: Confirmed, include_sheet: z.boolean().default(true) },
   async ({ include_sheet }) => {
     const ws = await getWorkspace();
     if (!ws?.design) throw new Error('Nothing open in the editor');
@@ -636,9 +671,9 @@ tool('save_campaign', 'Create or overwrite a whole saved campaign: shared defaul
 tool('remove_catalog_item', 'Remove an ad from a saved campaign by id.', { catalog: z.string(), id: z.string() },
   async ({ catalog, id }) => { await removeItem(catalog, id); return text(`Removed ${id} from ${catalog}`); });
 
-tool('render_catalog', 'Render all ads in a saved campaign (or only the given ids). Returns folders, captions and a contact sheet.',
-  { catalog: z.string(), only: z.array(z.string()).optional(), ...Output },
-  async ({ catalog, only, include_sheet, ...o }) => {
+tool('render_catalog', 'BACKGROUND RENDER, ONLY WHEN THE USER EXPLICITLY ASKED FOR FILES. Render all ads in a saved campaign (or only the given ids). Returns folders, captions and a contact sheet.',
+  { confirmed_by_user: Confirmed, catalog: z.string(), only: z.array(z.string()).optional(), ...Output },
+  async ({ confirmed_by_user, catalog, only, include_sheet, ...o }) => {
     const ms = await renderCatalog(catalog, { only, ...outputOpts(o) });
     const out = [text({ outputRoot: rel(OUTPUT_DIR), items: ms.map(manifestSummary) })];
     if (include_sheet) out.push(await sheetFor(ms));
