@@ -682,6 +682,15 @@ textarea.paste{font-family:var(--mono);font-size:12.5px;margin:10px 0}
 .brand-import-notes{padding:12px 0;border-top:1px solid var(--line);margin-top:14px}
 .brand-import-notes summary{cursor:pointer;font-size:13px;font-weight:600}
 .brand-import-actions{padding-top:14px;flex-wrap:wrap;gap:12px}
+.brand-direction{padding:20px;margin:18px 0 24px;border:1px solid var(--line-strong);border-radius:var(--r);background:var(--surface-2)}
+.brand-direction h3,.brand-colourway-review h3{font-size:16px;margin:0 0 14px}.brand-direction h4{margin:0 0 10px}
+.brand-direction summary{cursor:pointer;font-size:14px;font-weight:600}.brand-direction[open] summary{margin-bottom:18px}.brand-direction summary:focus-visible{outline:2px solid var(--accent);outline-offset:4px}
+.brand-direction-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}.brand-direction-grid p,.brand-direction-grid li{font-size:13px;line-height:1.65}.brand-direction-grid ul{padding-left:18px}.brand-direction-grid li{margin-bottom:8px}
+.brand-colourway-review{margin:24px 0}.brand-colourway-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.brand-colourway-grid article{border-radius:14px;padding:20px;display:flex;flex-direction:column;align-items:flex-start;gap:16px;min-height:230px;overflow-wrap:anywhere;border:1px solid var(--line)}
+.brand-colourway-grid article>small{text-transform:uppercase;letter-spacing:.1em;color:inherit;font-size:10px}.brand-colourway-grid article>strong{font-size:26px;line-height:1.1}.brand-colourway-grid article>p{font-size:12px;flex:1;margin:0}.brand-colourway-grid article>span{padding:8px 12px;font-size:11px}
+.brand-reference-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:12px 0}.brand-reference-grid figure{margin:0}.brand-reference-grid img{width:100%;border-radius:8px;border:1px solid var(--line)}.brand-reference-grid figcaption{font-size:10px;color:var(--text-2);overflow-wrap:anywhere;margin-top:5px}
+@media(max-width:700px){.brand-direction-grid,.brand-colourway-grid,.brand-reference-grid{grid-template-columns:1fr}}
 @media(max-width:700px){.brand-import-review{grid-template-columns:1fr}.brand-import-preview{min-height:220px}.brand-import-actions .btn{width:100%}}
 /* AI activity (top bar) */
 .ai-activity{position:relative}

@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { mcpLaunch } from './core/launch.js';
+import { requestImages } from './ai-images.js';
 
 const SYSTEM = `You are the ChatGPT assistant inside Content Chef, a studio for on-brand social posts and ads. Work through Content Chef's MCP tools. Use get_editor to see the user's current design and update_editor to change it live. Read the tool server's instructions for templates, animation and copy markup. Be brief and concrete. Ask before exporting more than 60 files or overwriting a brand's palettes. Do not use shell commands or edit files directly.`;
 const MISSING = 'Codex was not found. Install Codex CLI or set its executable path in Settings → AI assistant.';
@@ -99,7 +100,7 @@ export async function startCodexLogin(override) {
 
 // JSON strings are TOML basic strings for the paths/values used here. They are passed as
 // individual argv entries, never interpolated into shell commands.
-export function codexArgs({ settings, session, schemaFile, instructions = SYSTEM, tools = true }) {
+export function codexArgs({ settings, session, schemaFile, images = [], instructions = SYSTEM, tools = true }) {
   const args = ['exec', '--json', '--skip-git-repo-check', '--ignore-user-config', '--color', 'never', '--sandbox', 'read-only'];
   const config = {
     approval_policy: 'never', forced_login_method: 'chatgpt', web_search: 'disabled',
@@ -122,6 +123,7 @@ export function codexArgs({ settings, session, schemaFile, instructions = SYSTEM
   for (const [k, v] of Object.entries(config)) args.push('-c', `${k}=${JSON.stringify(v)}`);
   if (settings.codex.model) args.push('--model', settings.codex.model);
   if (schemaFile) args.push('--output-schema', schemaFile, '--ephemeral');
+  for (const image of images) args.push('--image', image);
   if (session) args.push('resume', session);
   args.push('-');
   return args;
@@ -232,13 +234,20 @@ export async function runCodexChat({ conversationId, text, emit, settings, signa
 }
 
 export async function writeWithCodex(settings, req) {
+  const shots = requestImages(req.images);
   return withCodex(settings, async (exe, cwd) => {
     const schemaFile = path.join(cwd, 'schema.json');
     await fsp.writeFile(schemaFile, JSON.stringify(req.schema));
+    const images = [];
+    for (const [index, shot] of shots.entries()) {
+      const file = path.join(cwd, `website-${index + 1}.${shot.type === 'image/png' ? 'png' : 'jpg'}`);
+      await fsp.writeFile(file, shot.body);
+      images.push(file);
+    }
     let reply = '';
     const events = codexEventHandler({ emit: (e) => { if (e.type === 'text') reply = e.delta; } });
     await runCodexProcess({ exe, cwd, signal: req.signal,
-      args: codexArgs({ settings, schemaFile, tools: false,
+      args: codexArgs({ settings, schemaFile, images, tools: false,
         instructions: req.system || 'You are the copywriter inside Content Chef. Write only the requested copy as JSON matching the supplied schema. Do not use tools or change any design.' }),
       prompt: req.text, onEvent: events.handle,
     });

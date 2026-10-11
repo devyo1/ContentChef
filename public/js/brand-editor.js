@@ -190,6 +190,7 @@ export function BrandsPage() {
           <${Field} label="What you offer"><textarea rows="3" value=${b.strategy?.description ?? ''} onInput=${(e) => set({ strategy: { ...b.strategy, description: e.target.value } })} /><//>
           <${Field} label="Who you want to reach"><textarea rows="3" value=${b.strategy?.audience ?? ''} onInput=${(e) => set({ strategy: { ...b.strategy, audience: e.target.value } })} /><//>
           <${Field} label="Ad goals & direction"><textarea rows="3" value=${b.strategy?.brief ?? ''} onInput=${(e) => set({ strategy: { ...b.strategy, brief: e.target.value } })} placeholder="What should your ads promote?" /><//>
+          ${b.strategy?.designDirection && html`<h4>Visual direction</h4>${[['concept', 'Creative direction'], ['imagery', 'Photography & imagery'], ['layout', 'Composition & layout']].map(([key, label]) => html`<${Field} label=${label}><textarea rows="3" value=${b.strategy.designDirection[key] ?? ''} onInput=${(e) => set({ strategy: { ...b.strategy, designDirection: { ...b.strategy.designDirection, [key]: e.target.value } } })} /><//>`)}`}
         <//>
 
         <${BrandSection} title="Captions" hint="Used to write platform captions. AI assistants also read the voice notes.">

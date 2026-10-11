@@ -30,6 +30,15 @@ test('copywriting is ephemeral, schema-constrained, and has no Content Chef tool
   assert.ok(!args.some((a) => a.startsWith('mcp_servers.')));
 });
 
+test('visual brand requests attach screenshots as separate CLI arguments without enabling tools', () => {
+  const images = ['C:\\temporary folder\\website-1.jpg', 'C:\\temporary folder\\website-2.png'];
+  const args = codexArgs({ settings, tools: false, schemaFile: 'schema.json', images });
+  assert.deepEqual(args.filter((_, i) => args[i - 1] === '--image'), images);
+  assert.ok(args.includes('--ephemeral'));
+  assert.ok(args.includes('features.shell_tool=false'));
+  assert.ok(!args.some((arg) => arg.startsWith('mcp_servers.')));
+});
+
 test('Codex events preserve tool activity, images, failures and assistant replies', () => {
   const emitted = [], sessions = [];
   const events = codexEventHandler({ emit: (e) => emitted.push(e), onSession: (id) => sessions.push(id) });

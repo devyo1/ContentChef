@@ -43,7 +43,7 @@ Use **Launcher** in the studio's top bar to return to update status or open your
 
 ## What it does
 
-- **Start a brand from your website.** Choose **New brand → From my website**, paste a URL and optionally describe what you want to advertise or who you want to reach. Your connected assistant reads the page and styles, suggests colours, fonts, audience and voice, and shows a starter kit to review. Choose a detected logo or keep a wordmark, then **Create brand & fine-tune**. The saved audience and ad goals guide later copy and captions. Sites with little readable content, blocked styles or unavailable fonts are flagged in the review; you can always start manually.
+- **Design a brand inspired by your website.** Choose **New brand → From my website**, paste a URL and describe the feel you want and who you want to reach. Your connected ChatGPT or Claude account receives actual screenshots, rendered styles and business content from the page and up to two related pages. It develops a creative direction, three complementary palettes, typography, imagery and layout guidance, audience and voice. Review the website references and proposed direction, choose a detected logo or keep a wordmark, then **Create brand & fine-tune**. The visual direction is saved with the brand for future AI work. Scans with missing screenshots clearly disclose that limitation; you can always start manually.
 - **Brand kit.** Fonts (picked visually), logo, colourways, button style and caption voice. Everything you make stays on brand.
 - **28 templates in four families:**
   - *Promo & ads*: Headline, Stack, Split, Frame, Big Offer, Event, Ticket, Menu

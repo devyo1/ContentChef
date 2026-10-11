@@ -1,6 +1,6 @@
 {
   "name": "content-chef",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "Brand-aware content studio: design ads and value posts once, export every size as PNG/JPG/MP4. Desktop app, CLI, and an MCP connector for ChatGPT, Codex and Claude.",
   "type": "module",

@@ -98,8 +98,16 @@ export function readWebsiteHtml(html, url) {
   const description = meta('description') || meta('og:description');
   const themeColor = meta('theme-color');
   const headings = $('h1,h2,h3').slice(0, 25).map((_, el) => shortText($(el).text(), 250)).get();
+  const related = [];
+  $('a[href]').each((_, el) => {
+    const href = linkedUrl($(el).attr('href'), base);
+    if (!href || new URL(href).origin !== new URL(url).origin || href === url || new URL(href).search) return;
+    const label = shortText($(el).text(), 80);
+    if (/about|services|studio|approach|story|what-we-do/i.test(`${new URL(href).pathname} ${label}`)
+      && !/login|sign-in|privacy|terms|download|\.(pdf|zip|exe)$/i.test(href)) related.push({ url: href, label });
+  });
   $('script,style,noscript,template,svg,iframe,nav,footer').remove();
-  return { url, title, name, description, themeColor, headings, text: shortText($('body').text(), 14000), styles, sheets, logos: logos.slice(0, 6) };
+  return { url, title, name, description, themeColor, headings, text: shortText($('body').text(), 14000), styles, sheets, logos: logos.slice(0, 6), related: [...new Map(related.map((p) => [p.url, p])).values()].slice(0, 2) };
 }
 
 export function cssIdentity(css) {
@@ -146,10 +154,11 @@ export function safeLogo(body, type) {
   return { body: Buffer.from($.xml(root)), type, ext: 'svg' };
 }
 
-/** Render JS-only sites in a fresh context; every request still goes through the public-web reader. */
+/** Render the actual visual identity in isolation; every network request uses pinned public DNS. */
 async function renderWebsite(response, signal) {
   const browser = await getBrowser('cpu');
-  const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: false, viewport: { width: 1280, height: 900 } });
+  signal?.throwIfAborted();
+  const context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: false, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 1, reducedMotion: 'reduce' });
   let count = 0, bytes = 0;
   const abort = () => context.close().catch(() => {});
   signal?.addEventListener('abort', abort, { once: true });
@@ -157,7 +166,7 @@ async function renderWebsite(response, signal) {
     await context.routeWebSocket('**/*', (socket) => socket.close());
     await context.route('**/*', async (route) => {
       const req = route.request();
-      if (req.method() !== 'GET' || !['document','script','stylesheet','image'].includes(req.resourceType()) || ++count > 40 || bytes > 12_000_000) return route.abort();
+      if (req.method() !== 'GET' || !['document','script','stylesheet','image','font','fetch','xhr'].includes(req.resourceType()) || ++count > 80 || bytes > 24_000_000) return route.abort();
       try {
         const file = req.url() === response.url ? response : await fetchWebsite(req.url(), { maxBytes: 4_000_000, signal });
         bytes += file.body.length;
@@ -167,33 +176,89 @@ async function renderWebsite(response, signal) {
     const page = await context.newPage();
     await page.goto(response.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.locator('h1').first().waitFor({ state: 'attached', timeout: 5000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    await page.evaluate(() => Promise.race([document.fonts.ready, new Promise((resolve) => setTimeout(resolve, 3000))]));
+    // JS-driven type and scroll reveals can continue after the network goes idle.
+    // Give visible content a bounded settling window; don't freeze a half-written hero.
+    const settle = () => page.evaluate(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1600));
+      let previous = '', stable = 0;
+      for (let n = 0; n < 24; n++) {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+        const headings = [...document.querySelectorAll('h1,h2')].filter((el) => { const r = el.getBoundingClientRect(); return r.top < innerHeight && r.bottom > 0 && getComputedStyle(el).visibility !== 'hidden'; });
+        const current = (headings.length ? headings.map((el) => el.innerText).join(' ') : document.body.innerText).trim();
+        stable = current === previous ? stable + 1 : 0; previous = current;
+        if (current && stable >= 3) break;
+      }
+    });
+    await settle();
     const computed = await page.evaluate(() => {
       const read = (selector) => {
         const el = document.querySelector(selector);
         if (!el) return null;
         const s = getComputedStyle(el);
-        return { font: s.fontFamily, weight: s.fontWeight, color: s.color, background: s.backgroundColor, radius: s.borderRadius };
+        return { font: s.fontFamily, weight: s.fontWeight, size: s.fontSize, tracking: s.letterSpacing, leading: s.lineHeight, color: s.color, background: s.backgroundColor, backgroundImage: s.backgroundImage.slice(0, 400), radius: s.borderRadius };
       };
       return { body: read('body'), heading: read('h1'), button: read('main button,main a[class*="btn"],a[class*="button"],button') };
     });
-    return { html: await page.content(), computed };
+    const visuals = await page.evaluate(() => {
+      const text = (el) => (el?.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 350);
+      const visible = (el) => { const r = el.getBoundingClientRect(), s = getComputedStyle(el); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && s.visibility !== 'hidden' && Number(s.opacity) > 0; };
+      return {
+        sections: [...document.querySelectorAll('header,main > section,main > div,section,[role="region"],[data-vibe]')].filter(visible).filter((el) => text(el)).slice(0, 12).map((el) => {
+          const s = getComputedStyle(el);
+          return { heading: text(el.querySelector('h1,h2,h3')), text: text(el), background: s.backgroundColor, backgroundImage: s.backgroundImage.slice(0, 400), layout: s.display, gap: s.gap, padding: s.padding, radius: s.borderRadius };
+        }),
+        imagery: [...document.images].filter(visible).filter((el) => el.width > 100 || el.height > 100).slice(0, 10).map((el) => ({ alt: el.alt.slice(0, 200), width: el.width, height: el.height })),
+      };
+    });
+    const screenshot = () => page.screenshot({ type: 'jpeg', quality: 80, animations: 'disabled', timeout: 8000 });
+    const screenshots = [{ label: 'Opening view', type: 'image/jpeg', body: await screenshot() }];
+    const textViews = [await page.locator('body').innerText()];
+    const positions = await page.evaluate(() => {
+      const max = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+      return [...new Set([Math.min(900, max), Math.round(max * 0.65)])].filter((y) => y > 300).sort((a, b) => a - b);
+    });
+    for (const y of positions) {
+      await page.evaluate((y) => window.scrollTo(0, y), y);
+      await page.waitForLoadState('networkidle', { timeout: 2000 }).catch(() => {});
+      await settle();
+      textViews.push(await page.locator('body').innerText());
+      screenshots.push({ label: `Page section at ${y}px`, type: 'image/jpeg', body: await screenshot() });
+    }
+    return { html: await page.content(), computed, visuals, screenshots, visibleText: [...new Set(textViews)].join('\n').slice(0, 18000) };
   } finally { signal?.removeEventListener('abort', abort); await context.close(); }
 }
 
 export async function scanWebsite(input, { fetcher = fetchWebsite, render = renderWebsite, signal } = {}) {
-  signal = signal ? AbortSignal.any([signal, AbortSignal.timeout(60000)]) : AbortSignal.timeout(60000);
+  signal = signal ? AbortSignal.any([signal, AbortSignal.timeout(120000)]) : AbortSignal.timeout(120000);
   const url = websiteUrl(input).href;
   const response = await fetcher(url, { signal });
   if (!['text/html', 'application/xhtml+xml'].includes(response.type)) throw new Error('That URL is not a web page. Enter your website’s home or about page.');
   let page = readWebsiteHtml(response.body.toString('utf8'), response.url);
   const warnings = [];
-  let computed;
-  if (page.text.length < 200) {
+  let computed, visuals;
+  const images = [], pages = [];
+  try {
+    const rendered = await render(response, signal);
+    page = readWebsiteHtml(rendered.html, response.url);
+    if (rendered.visibleText) page.text = rendered.visibleText;
+    computed = rendered.computed; visuals = rendered.visuals;
+    for (const shot of (rendered.screenshots ?? []).slice(0, page.related.length > 1 ? 2 : 3)) images.push({ ...shot, label: `${page.url} — ${shot.label}` });
+  } catch { signal.throwIfAborted(); warnings.push('The live page could not be rendered. This is a limited text-and-styles scan; visual identity may be incomplete.'); }
+  // Read a small number of business pages, not a site's entire portfolio or every client brand.
+  for (const link of page.related) {
+    signal.throwIfAborted();
     try {
-      const rendered = await render(response, signal);
-      page = readWebsiteHtml(rendered.html, response.url);
-      computed = rendered.computed;
-    } catch { warnings.push('The live page could not be rendered. Suggestions use its available metadata and styles.'); }
+      const res = await fetcher(link.url, { signal });
+      if (!['text/html', 'application/xhtml+xml'].includes(res.type) || new URL(res.url).origin !== new URL(page.url).origin) continue;
+      let extra = readWebsiteHtml(res.body.toString('utf8'), res.url);
+      let rendered;
+      try { rendered = await render(res, signal); extra = readWebsiteHtml(rendered.html, res.url); }
+      catch { signal.throwIfAborted(); warnings.push('A supporting page could not be visually rendered; its readable text was used.'); }
+      pages.push({ url: res.url, title: extra.title, description: extra.description, headings: extra.headings, text: extra.text.slice(0, 6000), computed: rendered?.computed, visuals: rendered?.visuals });
+      if (rendered?.screenshots?.[0]) images.push({ ...rendered.screenshots[0], label: `${res.url} — Opening view` });
+    } catch { signal.throwIfAborted(); warnings.push('A supporting page could not be read. The available pages were used.'); }
   }
   if (page.text.length < 100 && !page.description) throw new Error('This page has too little readable content. Try a public about or services page, or create the brand manually.');
   if (page.text.length < 100) warnings.push('Limited page text was available; review the suggested business description and audience.');
@@ -218,6 +283,8 @@ export async function scanWebsite(input, { fetcher = fetchWebsite, render = rend
     } catch { /* logo is optional; keep the rest of the brand usable */ }
   }
   if (!logos.length) warnings.push('No usable logo was found. A wordmark will be used; you can upload a logo later.');
-  return { evidence: { url: page.url, name: page.name, title: page.title, description: page.description, headings: page.headings, text: page.text, themeColor: page.themeColor, computed, ...identity },
-    sources: [page.url, ...sheets.filter(Boolean).map((s) => s.url)], warnings: [...new Set(warnings)], logos };
+  signal.throwIfAborted();
+  if (!images.length) warnings.push('No screenshots were available to the assistant. This proposal is based on text and style evidence only.');
+  return { evidence: { url: page.url, name: page.name, title: page.title, description: page.description, headings: page.headings, text: page.text, themeColor: page.themeColor, computed, visuals, pages, screenshotLabels: images.map((i) => i.label), ...identity },
+    images, sources: [page.url, ...pages.map((p) => p.url), ...sheets.filter(Boolean).map((s) => s.url)], warnings: [...new Set(warnings)], logos };
 }

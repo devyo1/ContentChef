@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { loadBrand, getSettings, getTemplate, DATA_DIR, PLATFORMS } from './core/index.js';
 import { findClaude, childEnv, AUTH_ERROR, SIGN_IN_MESSAGE } from './claude-code.js';
 import { writeWithCodex } from './codex.js';
+import { visualMessage } from './ai-images.js';
 
 export function writeWithProvider(settings, req) {
   switch (settings.assistant.provider) {
@@ -120,9 +121,9 @@ async function viaApi(settings, req) {
     model: settings.claude.model || 'claude-opus-5',
     max_tokens: 16000,
     thinking: { type: 'adaptive' },
-    output_config: { effort: 'low', format: jsonSchemaOutputFormat(req.schema) },
+    output_config: { effort: req.images?.length ? 'high' : 'low', format: jsonSchemaOutputFormat(req.schema) },
     system: req.system || SYSTEM,
-    messages: [{ role: 'user', content: req.text }],
+    messages: [{ role: 'user', content: req.images?.length ? visualMessage(req.text, req.images) : req.text }],
   }, { signal: req.signal });
   if (res.stop_reason === 'refusal') throw new Error('Claude declined to write that. Try a different brief.');
   if (!res.parsed_output) throw new Error('Claude did not return usable copy. Try again.');
@@ -133,19 +134,22 @@ async function viaApi(settings, req) {
 async function viaClaudeCode(settings, req) {
   const exe = findClaude(settings.claude.codePath);
   if (!exe) throw new Error('Claude Code was not found. Install the Claude desktop app, or add an API key in Settings.');
-  const args = ['-p', '--output-format', 'json', '--tools', '', '--strict-mcp-config', '--append-system-prompt', req.system || SYSTEM];
+  const visual = !!req.images?.length;
+  const args = ['-p', '--output-format', visual ? 'stream-json' : 'json', '--tools', '', '--strict-mcp-config', '--append-system-prompt', req.system || SYSTEM];
+  if (visual) args.push('--input-format', 'stream-json', '--verbose');
   if (settings.claude.codeModel) args.push('--model', settings.claude.codeModel);
   const prompt = `${req.text}\n\nReply with ONLY a JSON object matching this JSON Schema (no prose, no code fences):\n${JSON.stringify(req.schema)}`;
+  const input = visual ? `${JSON.stringify({ type: 'user', session_id: '', message: { role: 'user', content: visualMessage(prompt, req.images) }, parent_tool_use_id: null })}\n` : prompt;
   const child = spawn(exe, args, { cwd: DATA_DIR, env: childEnv(), windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], signal: req.signal });
   child.stdin.on('error', () => {});
-  child.stdin.end(prompt);
+  child.stdin.end(input);
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', (d) => { stdout += d; });
   child.stderr.on('data', (d) => { stderr += d; });
   const code = await new Promise((resolve, reject) => { child.on('close', resolve); child.on('error', reject); });
   let result;
-  try { result = JSON.parse(stdout); } catch { /* not JSON */ }
+  try { result = visual ? stdout.trim().split('\n').map((line) => { try { return JSON.parse(line); } catch { return null; } }).findLast((event) => event?.type === 'result') : JSON.parse(stdout); } catch { /* not JSON */ }
   const reply = String(result?.result ?? '');
   if (result?.is_error || code !== 0) {
     const msg = reply || stderr.trim().slice(-300) || `Claude Code exited (${code})`;

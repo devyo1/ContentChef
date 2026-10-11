@@ -69,15 +69,15 @@ A **brand kit** is your business’s name, colours, fonts and writing style. Con
 1. Click the current brand name near the top left, then **New brand…**. The example brands are just there to try.
 2. Choose **From my website**.
 3. In **Your website**, type your website address, such as `yourbusiness.com`.
-4. In **What do you want ads for?**, explain what you sell and who should see it. For example:
+4. In **What should your brand feel like, and who is it for?**, explain the style you want, what you sell and who should see it. For example:
 
    > Promote my photography services to local business owners. Make the brand feel friendly, modern and professional.
 
-5. Click **Build my brand**. Leave the window open while it reads your website.
-6. Review the suggested name, colours and wording. Choose a logo if one was found, or keep your business name as text.
+5. Click **Build my brand**. Leave the window open while your connected assistant studies website screenshots and develops a brand direction. This can take a few minutes.
+6. Review the creative direction, colours, fonts, imagery advice and wording. Expand **What we found & suggested** to see the website screenshots it used. Choose a logo if one was found, or keep your business name as text.
 7. Click **Create brand & fine-tune**. Your brand is saved. You can revisit it under **Brand kit** later.
 
-Website content and your description are sent to your selected AI to make these suggestions. Check that they describe your business correctly.
+Website screenshots, page content and your description are sent to your selected AI to make these suggestions. Check that they describe your business correctly. The result is a new brand system inspired by the website, rather than an exact copy of its page design.
 
 **No website, or the site couldn’t be read?** Choose **Start manually**, type your brand name and click **Create brand**. Choose colours and fonts in **Brand kit**, or connect your assistant and ask it to help you develop a look.
 

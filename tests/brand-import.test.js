@@ -9,12 +9,19 @@ import { websiteUrl, isPublicAddress, publicAddresses, readWebsiteHtml, cssIdent
 // so this file runs persistence assertions in a separate subprocess below.
 import { execFileSync } from 'node:child_process';
 import { proposalToBrand, draftBrand, acceptBrandDraft } from '../src/brand-import.js';
+import { requestImages, visualMessage } from '../src/ai-images.js';
 
 const proposal = {
   name: 'Example Studio', tagline: 'Built with care.', description: 'Web design services.', audience: 'Local business owners.', voice: 'Warm and direct.',
   displayFont: 'Instrument Serif', bodyFont: 'Inter', headlineCase: 'none', buttonShape: 'rounded',
   palette: { bg: '#111111', fg: '#FFFFFF', accent: '#FF7755', muted: '#BBBBBB', ctaBg: '#FF7755', ctaText: '#111111' },
   reasoning: 'Colours and type from the website; audience suggested from the brief.', notes: [],
+  direction: { concept: 'Editorial warmth with a technical rhythm.', siteThemes: ['Oversized serif headings and a dark canvas'], imagery: 'Warm natural detail photography.', layout: 'Large headings with generous space.', keep: 'Warm contrast.', evolve: 'Clearer service hierarchy.' },
+  visualStyle: { displayWeight: 400, bodyWeight: 500, headlineTracking: -0.025, headlineLeading: 1.05, bgStyle: 'spotlight', grain: true, align: 'left' },
+  alternatePalettes: [
+    { name: 'supporting', palette: { bg: '#FFFFFF', fg: '#111111', accent: '#993311', muted: '#555555', ctaBg: '#993311', ctaText: '#FFFFFF' } },
+    { name: 'contrast', palette: { bg: '#111111', fg: '#FFFFFF', accent: '#FFCC66', muted: '#BBBBBB', ctaBg: '#FFCC66', ctaText: '#111111' } },
+  ],
 };
 
 test('website URL accepts bare domains but rejects non-web schemes and credentials', () => {
@@ -79,17 +86,65 @@ test('brand proposal validates AI output, repairs contrast and persists targetin
   assert.equal(normalized.brand.strategy.brief, 'Promote web design');
   assert.equal(normalized.brand.strategy.audience, proposal.audience);
   assert.equal(normalized.brand.captions.link, 'https://example.com/');
+  assert.deepEqual(normalized.brand.strategy.designDirection, proposal.direction);
+  assert.equal(normalized.brand.fonts.display.weight, 400);
+  assert.equal(normalized.brand.style.headlineTracking, '-0.025em');
+  assert.equal(normalized.brand.style.bgStyle, 'spotlight');
+  assert.equal(Object.keys(normalized.brand.palettes).length, 3);
   assert.throws(() => proposalToBrand({ ...proposal, palette: { ...proposal.palette, bg: 'url(file:///secret)' } }, { url: 'https://example.com' }));
 });
 
 test('draft uses website evidence and brief, distinguishes source notes, and rejects expired saves', async () => {
   let request;
-  const result = await draftBrand({ url: 'example.com', prompt: 'Reach local owners' }, { settings: {}, scan: async () => ({ evidence: { url: 'https://example.com/', colors: [], fonts: [], text: 'Studio information' }, sources: ['https://example.com/'], warnings: ['Fonts suggested'], logos: [] }), generate: async (_, req) => { request = req; return proposal; } });
+  const image = { body: Buffer.from([255, 216, 255, 0]), type: 'image/jpeg', label: 'Homepage' };
+  const result = await draftBrand({ url: 'example.com', prompt: 'Reach local owners' }, { settings: {}, scan: async () => ({ evidence: { url: 'https://example.com/', colors: [], fonts: [], text: 'Studio information' }, sources: ['https://example.com/'], warnings: ['Fonts suggested'], logos: [], images: [image] }), generate: async (_, req) => { request = req; return proposal; } });
   assert.equal(JSON.parse(request.text).userBrief, 'Reach local owners');
   assert.match(request.system, /untrusted evidence/);
   assert.ok(result.notes.includes('Fonts suggested'));
   assert.equal(result.brand.name, 'Example Studio');
+  assert.equal(request.images[0], image);
+  assert.equal(result.references[0].preview, 'data:image/jpeg;base64,/9j/AA==');
+  assert.ok(request.schema.required.includes('direction'));
   await assert.rejects(acceptBrandDraft({ draftId: '00000000-0000-4000-8000-000000000000', proposal }), /expired/);
+});
+
+test('normal HTML sites are visually rendered, and supporting pages are bounded to the site', async () => {
+  const html = `<h1>Studio</h1><p>${'A complete business website. '.repeat(20)}</p><a href="/about">About</a><a href="/services">Services</a><a href="/story">Story</a><a href="https://other.example/services">External</a><a href="/services?logout=1">Services</a>`;
+  const calls = [];
+  const scan = await scanWebsite('example.com', {
+    fetcher: async (url) => ({ url, type: 'text/html', body: Buffer.from(html) }),
+    render: async (response) => { calls.push(response.url); return { html, screenshots: [{ label: 'Rendered view', type: 'image/jpeg', body: Buffer.from([255,216,255]) }], computed: { heading: { font: 'Instrument Serif' } } }; },
+  });
+  assert.deepEqual(calls, ['https://example.com/', 'https://example.com/about', 'https://example.com/services']);
+  assert.equal(scan.images.length, 3);
+  assert.equal(scan.evidence.pages.length, 2);
+  assert.equal(scan.evidence.computed.heading.font, 'Instrument Serif');
+});
+
+test('visual failures are disclosed and cancellation never becomes a partial-success scan', async () => {
+  const fetcher = async (url) => ({ url, type: 'text/html', body: Buffer.from(`<h1>Studio</h1><p>${'A business website with readable information. '.repeat(5)}</p>`) });
+  const scan = await scanWebsite('example.com', { fetcher, render: async () => { throw new Error('Browser unavailable'); } });
+  assert.equal(scan.images.length, 0);
+  assert.ok(scan.warnings.some((w) => /No screenshots/.test(w)));
+  const controller = new AbortController();
+  await assert.rejects(scanWebsite('example.com', { fetcher, signal: controller.signal, render: async () => { controller.abort(); throw new Error('Cancelled'); } }), /abort/i);
+});
+
+test('image requests send real raster content and reject file paths, unsupported data and excessive size', () => {
+  const image = { body: Buffer.from([255,216,255,0]), type: 'image/jpeg', label: 'Website' };
+  const message = visualMessage('Design a brand', [image]);
+  assert.equal(message[1].source.data, '/9j/AA==');
+  assert.equal(message[1].source.media_type, 'image/jpeg');
+  assert.equal(message.at(-1).text, 'Design a brand');
+  assert.throws(() => requestImages([{ path: '/private/auth.json', type: 'image/jpeg' }]), /Invalid/);
+  assert.throws(() => requestImages([{ ...image, body: Buffer.from('<svg/>') }]), /invalid/);
+  assert.throws(() => requestImages(Array(5).fill(image)), /four/);
+  assert.throws(() => requestImages([{ ...image, body: Buffer.alloc(4_000_001) }]), /large/);
+});
+
+test('incomplete visual proposals do not silently fall back to a token-only brand kit', async () => {
+  const { direction, ...incomplete } = proposal;
+  await assert.rejects(draftBrand({ url: 'example.com' }, { settings: {}, scan: async () => ({ evidence: { url: 'https://example.com/' }, warnings: [], logos: [], sources: [] }), generate: async () => incomplete }), /direction/);
 });
 
 test('accepting a draft saves the kit once and duplicate names never overwrite existing brands', async () => {
@@ -104,6 +159,9 @@ test('accepting a draft saves the kit once and duplicate names never overwrite e
       assert.equal((await listBrands()).length,0);
       const first=await acceptBrandDraft({draftId:draft.draftId,proposal});
       assert.equal(first.strategy.brief,'Reach local owners');
+      assert.deepEqual(first.strategy.designDirection,proposal.direction);
+      assert.equal(first.style.bgStyle,'spotlight');
+      assert.equal(Object.keys(first.palettes).length,3);
       const second=await createBrand({name:first.name,tagline:'Different'});
       assert.notEqual(first.id,second.id);
       assert.equal((await loadBrand(first.id)).tagline,proposal.tagline);
