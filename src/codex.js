@@ -50,7 +50,7 @@ export function codexEnv(source = process.env) {
   return env;
 }
 
-function command(exe) {
+export function codexCommand(exe) {
   if (/\.cmd$/i.test(exe)) {
     const script = path.join(path.dirname(exe), 'node_modules', '@openai', 'codex', 'bin', 'codex.js');
     if (!isFile(script)) throw new Error('Cannot locate Codex behind this npm launcher. Set the path to codex.exe in Settings.');
@@ -67,7 +67,7 @@ export async function codexStatus({ fresh = false, override } = {}) {
   const cached = statusCache.get(exe);
   if (!fresh && cached && Date.now() - cached.at < 30000) return { ...cached.value, loginPending: !!login };
   let cmd;
-  try { cmd = command(exe); }
+  try { cmd = codexCommand(exe); }
   catch (err) { return { installed: true, path: exe, loggedIn: false, error: err.message }; }
   const value = await new Promise((resolve) => {
     execFile(cmd.exe, [...cmd.prefix, 'login', 'status'], { env: cmd.env, timeout: 20000, windowsHide: true }, (err, stdout, stderr) => {
@@ -87,7 +87,7 @@ export async function startCodexLogin(override) {
   if (login) return { ok: true };
   const exe = findCodex(override);
   if (!exe) throw new Error(MISSING);
-  const cmd = command(exe);
+  const cmd = codexCommand(exe);
   const child = spawn(cmd.exe, [...cmd.prefix, 'login'], { env: cmd.env, windowsHide: true, stdio: 'ignore' });
   login = child;
   statusCache.clear();
@@ -108,6 +108,8 @@ export function codexArgs({ settings, session, schemaFile, images = [], instruct
     'features.shell_tool': false, 'features.apps': false, 'features.plugins': false,
     'features.multi_agent': false, 'features.hooks': false,
     'features.browser_use': false, 'features.computer_use': false,
+    // Images go through Content Chef's background tools so they are saved to brand assets.
+    'features.image_generation': false,
   };
   if (tools) {
     const mcp = mcpLaunch();
@@ -166,7 +168,7 @@ export function codexErrorMessage(message) {
 
 /** Run one CLI process with bounded lifetime and streaming UTF-8 JSONL parsing. */
 export async function runCodexProcess({ exe, args, cwd, prompt, onEvent, signal, timeoutMs = 10 * 60 * 1000 }) {
-  const cmd = command(exe);
+  const cmd = codexCommand(exe);
   const child = spawn(cmd.exe, [...cmd.prefix, ...args], { cwd, env: cmd.env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   let stderr = '', buffer = '', stopped = '';
   const stop = (reason) => { stopped = reason; child.kill(); };

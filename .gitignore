@@ -15,6 +15,7 @@
 .env.*
 !.env.example
 /auth.json
+**/higgsfield-oauth.json
 *.log
 
 # Machine / test leftovers

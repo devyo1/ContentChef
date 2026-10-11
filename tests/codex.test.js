@@ -12,6 +12,7 @@ test('Codex chat and resume isolate config while registering only Content Chef',
     assert.ok(args.includes('read-only'));
     assert.ok(args.includes('features.shell_tool=false'));
     assert.ok(args.includes('features.apps=false'));
+    assert.ok(args.includes('features.image_generation=false'));
     assert.ok(args.includes('forced_login_method="chatgpt"'));
     assert.ok(args.includes('mcp_servers.content-chef.required=true'));
     assert.ok(args.includes('mcp_servers.content-chef.default_tools_approval_mode="approve"'));

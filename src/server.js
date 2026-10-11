@@ -21,6 +21,8 @@ import { claudeCodeStatus, startClaudeLogin, runClaudeCodeChat, resetClaudeCodeC
 import { codexStatus, startCodexLogin, runCodexChat, resetCodexChat } from './codex.js';
 import { draftBrand, acceptBrandDraft } from './brand-import.js';
 import { createBrand } from './core/brands.js';
+import { imageStatus, prepareBackground, generateBackground } from './background-images.js';
+import { connectHiggsfield, finishHiggsfield, disconnectHiggsfield, higgsfieldModels } from './higgsfield.js';
 
 const PORT = Number(process.env.PORT ?? 4545);
 const APP_VERSION = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8')).version;
@@ -96,6 +98,23 @@ app.post('/api/upload', express.raw({ type: '*/*', limit: '500mb' }), api(async 
 }));
 
 app.delete('/api/brand/:id/asset', api(async (req) => ({ removed: await deleteAsset(req.params.id, req.query.ref) })));
+
+app.get('/api/images/status', api(async req => imageStatus(await getSettings(), req.query.fresh === '1')));
+app.get('/api/higgsfield/models', api(() => higgsfieldModels()));
+app.post('/api/higgsfield/connect', api(req => connectHiggsfield(req.socket.localPort)));
+app.post('/api/higgsfield/disconnect', api(() => disconnectHiggsfield()));
+app.get('/api/higgsfield/callback', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try { await finishHiggsfield(req.query); res.redirect(303, '/?higgsfield=connected'); }
+  catch (e) { res.status(400).type('text').send(e.message); }
+});
+for (const [route, run] of [['prepare', (b, options) => prepareBackground(b, options)], ['generate', (b, options) => generateBackground(b.id, { ...options, acceptedCost: b.acceptedCost === true })]]) {
+  app.post(`/api/background/${route}`, api(async (req, res) => {
+    const controller = new AbortController();
+    res.on('close', () => controller.abort());
+    return run(req.body, { signal: controller.signal });
+  }));
+}
 
 // ── Preview + captions ──────────────────────────────────────────────────────
 

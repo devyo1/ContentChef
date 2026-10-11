@@ -42,6 +42,14 @@ Leave **Model** and **Codex executable path** alone. You don’t need an API key
 
 Prefer Claude? Choose **My Claude account (via Claude Code)** in the same menu and follow the sign-in instructions shown there.
 
+### Want AI to make the background picture?
+
+In **Create**, open **Look** and click **Create with AI** beside **Background**. Describe the picture you want, or enter a website for inspiration. Your saved brand style helps guide it. Choose a shape, generate, then click **Use this background** after reviewing the picture.
+
+**ChatGPT native** uses your connected ChatGPT account when image generation is available. **Higgsfield** works with either ChatGPT or Claude: open **Settings → Image generation → Connect Higgsfield**, finish signing in in your browser, then return and press **Check connection**. Choose a Higgsfield image model and review the credit cost before generating. Connecting Higgsfield here is separate from connecting it in another app; no API key is needed.
+
+You can set your preferred image provider in Settings, or change it for a single picture. Claude needs the Higgsfield connection to generate images. If you stop waiting after a generation starts, it may still finish in the provider's library; check there before trying again.
+
 ### When it says “Codex not found”
 
 Content Chef needs the Codex connection installed on this computer. Signing in to the ChatGPT website alone does not install it.

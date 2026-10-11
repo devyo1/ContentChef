@@ -1,6 +1,7 @@
 // Settings: appearance, assistant connections, export defaults and MCP clients.
 import { html, useState, api, useApp, Field, Segmented, toast } from './lib.js';
 import { assistantProvider } from './assistant.js';
+import { ImageSettings } from './image-generation.js';
 
 const MODELS = [
   ['claude-opus-5', 'Claude Opus 5 (recommended)'],
@@ -136,6 +137,7 @@ export function SettingsPage() {
             </div>`}
         </section>
 
+        <${ImageSettings} />
         <section class="card">
           <h3>Use Content Chef from other AI apps</h3>
           <p>Content Chef is also an MCP connector. Codex, Claude Desktop, Claude Code or another MCP client can use the same tools. Changes show up here live.</p>

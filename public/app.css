@@ -713,3 +713,9 @@ textarea.paste{font-family:var(--mono);font-size:12.5px;margin:10px 0}
 .dash-export-pic{border:0;padding:0;background:none;cursor:pointer;display:block;width:100%}
 .dash-export .row{margin-top:6px;gap:6px}
 .signin-wait{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-2);text-align:left}
+/* Generated backgrounds use the same controls and surfaces as the editor. */
+.image-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.image-controls textarea, .image-controls input, .image-controls select { width: 100%; }
+.image-connection { margin: 12px 0; }
+.image-error { color: var(--danger, #db5757); overflow-wrap: anywhere; }
+.generated-background-preview { display: block; max-width: 100%; max-height: 420px; margin: 16px auto; border-radius: 12px; object-fit: contain; }

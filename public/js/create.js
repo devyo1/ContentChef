@@ -9,6 +9,7 @@ import { PaletteCard, PalettesModal, GeneratorModal, brandForSave, slug } from '
 import { Icon } from './icons.js';
 import { glowColors } from './color.js';
 import { assistantName } from './assistant.js';
+import { BackgroundGenerator } from './image-generation.js';
 
 export const PLATFORM_GROUPS = [
   ['Instagram', ['ig-square', 'ig-portrait', 'story']],
@@ -315,6 +316,7 @@ function LookStep({ d, set, setContent, previewContent }) {
   const [generator, setGenerator] = useState(false);
   const [browse, setBrowse] = useState(null); // 'templates' | 'colours'
   const [uploading, setUploading] = useState(false);
+  const [imageGenerator, setImageGenerator] = useState(false);
   const c = d.content;
   const pal = brand.palettes[d.palettes[0]];
   // Functional update so quick successive clicks never work from stale state.
@@ -377,7 +379,10 @@ function LookStep({ d, set, setContent, previewContent }) {
       ${many('palettes') && d.palettes.length > 1 && html`<p class="tip">${plural(d.palettes.length, 'colourway')} selected: every ad is made in each one.</p>`}
       ${Object.keys(brand.palettes).length > 6 && html`<button class="btn small ghost wide" onClick=${() => setBrowse('colours')}>View all ${Object.keys(brand.palettes).length} colourways</button>`}
 
-      <h4>Background</h4>
+      <h4 class="h-row">Background <span class="push"><button class="btn small soft" onClick=${() => setImageGenerator(true)}>Create with AI</button></span></h4>
+      ${imageGenerator && html`<${BackgroundGenerator} brand=${brand} palette=${d.palettes[0]} content=${c} onClose=${() => setImageGenerator(false)} onApply=${async ref => {
+        await reload(); setContent({ background: ref, bgStyle: undefined, imageX: 50, imageY: 50, imageZoom: 1 }); setImageGenerator(false); toast('AI background added');
+      }} />`}
       <div class="bg-grid">
         <button type="button" class="bg-tile ${!c.background && !c.bgStyle ? 'on' : ''}" onClick=${() => setContent({ background: undefined, bgStyle: undefined })}>
           <span class="bg-sw auto">Auto</span><small>Template default</small></button>

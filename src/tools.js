@@ -14,6 +14,7 @@ import {
   TEMPLATES, TEMPLATE_TOKENS, CUSTOM_FIELDS, DECOR_PRESETS, saveCustomTemplate, readCustomSpec, deleteCustomTemplate,
 } from './core/index.js';
 import { generatePalette, HARMONIES, MOODS } from '../public/js/color.js';
+import { prepareBackground, generateBackground } from './background-images.js';
 
 export const INSTRUCTIONS = `Content Chef: brand-consistent social content (ads and value posts) rendered at exact platform sizes as PNG/JPG stills and MP4 videos.
 
@@ -33,6 +34,7 @@ Templates: PROMO headline, stack, split, frame, offer, event (big calendar date 
 Motion (content.animation): none, fade-up, typewriter, word-rise, pop, wipe. Effects (content.effects, combinable with any motion or a still): glimmer, holo. The lockscreen template has its own iOS-style animation whenever motion is on. The builder previews motion live; MP4s are made on export (output.video in update_editor).
 Per-element styling (content.styles): override colour, font, weight, size, letter spacing or case of headline / eyebrow / subhead / cta / logo etc. without touching the brand.
 Backgrounds: content.background = brand asset image or video (B-roll), else content.bgStyle = solid | gradient | aurora | spotlight | grid | dots.
+For an AI-generated background, call prepare_background with the user's prompt and optional website. It follows Settings' image provider (ChatGPT native or Higgsfield, independent of the main assistant). For Higgsfield, show the returned credit cost and get the user's acceptance before calling generate_background with accepted_cost=true. For native ChatGPT a request to generate the image is sufficient. Then set content.background to the returned ref with update_editor. Never claim an image exists without a successful result; do not substitute HTML/SVG for generated photography. Never automatically repeat a failed or timed-out generation.
 Colour: generate_palettes makes harmonious, contrast-checked palettes (optionally around locked colours); save one with save_brand.
 Stickers: content.decor places animated doodles (presets arrow / circle / underline / sparkles / burst, or your own SVG with SMIL/CSS animation). One or two, pointing at or framing the key message; check the result with preview_ad.
 New layouts: you can design brand-new templates. Call template_guide, then save_template (HTML + CSS with brand variables and {{tokens}}); it shows up in the user's template browser under Custom immediately. Review the test render it returns and iterate.
@@ -195,6 +197,16 @@ async function showInEditor({ brand, mode, content, variants, rows, templates, p
 }
 
 // ── Brands, palettes, fonts ─────────────────────────────────────────────────
+
+tool('prepare_background', 'Prepare one original AI background from a prompt and saved brand direction, optionally visually scanning a website. Returns an image brief ID and Higgsfield cost when applicable; does not generate the image.', {
+  brand: z.string(), prompt: z.string().max(6000).optional(), website: z.string().max(2048).optional(),
+  provider: z.enum(['auto', 'chatgpt', 'higgsfield']).optional(), model: z.string().optional(),
+  ratio: z.enum(['1:1', '4:5', '9:16', '16:9']).optional(), palette: z.string().optional(),
+}, async args => text(await prepareBackground(args)));
+
+tool('generate_background', 'Generate one prepared background and save it to the brand assets. Use the returned ref in update_editor. Only set accepted_cost when the user accepted the quoted Higgsfield cost. Never retry automatically after failure.', {
+  id: z.string(), accepted_cost: z.boolean().optional(),
+}, async ({ id, accepted_cost }) => text(await generateBackground(id, { acceptedCost: accepted_cost })));
 
 tool('list_brands', 'List all brands with palettes, fonts, style, caption voice, defaults and media assets (images, videos).', {},
   async () => text((await listBrands()).map(brandSummary)));

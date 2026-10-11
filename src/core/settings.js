@@ -10,6 +10,7 @@ export const SETTINGS_DEFAULTS = {
   sidebarCollapsed: false,
   assistant: { provider: 'codex' }, // codex | claude-code | api (Anthropic)
   codex: { codePath: '', model: '' },
+  images: { provider: 'auto', model: 'gpt_image_2_5' },
   // provider: 'claude-code' = your Claude account via the local Claude Code CLI (no API key);
   //           'api' = Anthropic API key.
   claude: { provider: 'claude-code', codeModel: '', codePath: '', apiKey: '', model: 'claude-opus-5', effort: 'medium' },
@@ -32,6 +33,7 @@ export function normalizeSettings(s = {}) {
     ...SETTINGS_DEFAULTS, ...s,
     assistant: { provider },
     codex: { ...SETTINGS_DEFAULTS.codex, ...s.codex },
+    images: { ...SETTINGS_DEFAULTS.images, ...s.images },
     claude: { ...SETTINGS_DEFAULTS.claude, ...s.claude },
     export: { ...SETTINGS_DEFAULTS.export, ...s.export },
   };
@@ -48,9 +50,12 @@ export async function saveSettings(patch) {
   const next = normalizeSettings({ ...cur, ...patch,
     assistant: { ...cur.assistant, ...patch.assistant },
     codex: { ...cur.codex, ...patch.codex },
+    images: { ...cur.images, ...patch.images },
     claude: { ...cur.claude, ...patch.claude }, export: { ...cur.export, ...patch.export },
   });
   if (!['codex', 'claude-code', 'api'].includes(next.assistant.provider)) throw new Error('Unknown assistant provider');
+  if (!['auto', 'chatgpt', 'higgsfield'].includes(next.images.provider)) throw new Error('Unknown image provider');
+  if (typeof next.images.model !== 'string' || next.images.model.length > 120) throw new Error('Invalid image model');
   for (const key of ['codePath', 'model']) {
     if (typeof next.codex[key] !== 'string') throw new Error(`Codex ${key} must be text`);
     next.codex[key] = next.codex[key].trim();
