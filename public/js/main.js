@@ -75,7 +75,31 @@ function App() {
   const [newBrand, setNewBrand] = useState(false);
   const [pending, setPending] = useState(null); // design handed from Saved → Create
   const brandRef = useRef(brandId);
+  const headerRef = useRef(null);
   brandRef.current = brandId;
+
+  // Measure the whole header, including desktop controls and changing AI activity labels.
+  // Give navigation its own row when it cannot fit, instead of clipping the last tab.
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const nav = header.querySelector('.tabs');
+    const width = (el) => el.getBoundingClientRect().width;
+    const px = (value) => Number.parseFloat(value) || 0;
+    const measure = () => {
+      const h = getComputedStyle(header), n = getComputedStyle(nav);
+      const buttons = [...nav.children];
+      const navWidth = buttons.reduce((sum, el) => sum + width(el), 0) + px(n.columnGap) * (buttons.length - 1)
+        + px(n.paddingLeft) + px(n.paddingRight) + px(n.borderLeftWidth) + px(n.borderRightWidth);
+      const others = [...header.children].filter((el) => el !== nav);
+      const needed = navWidth + others.reduce((sum, el) => sum + width(el), 0) + px(h.columnGap) * others.length;
+      header.classList.toggle('nav-wrapped', needed > header.clientWidth - px(h.paddingLeft) - px(h.paddingRight));
+    };
+    const observer = new ResizeObserver(measure);
+    [header, ...header.children, ...nav.children].forEach((el) => observer.observe(el));
+    measure();
+    return () => observer.disconnect();
+  }, [!!meta?.brands.length, !!settings]);
 
   const reload = async () => {
     try { const m = await api('GET', '/api/meta'); setMeta(m); return m; } catch (e) { setError(e.message); return null; }
@@ -136,13 +160,14 @@ function App() {
   return html`
     <${AppCtx.Provider} value=${ctx}>
       <div class="shell">
-        <header class="topbar">
+        <header class="topbar" ref=${headerRef}>
           <div class="logo"><img class="mark-img" src="logo.svg" alt="" width="34" height="34" /><span class="word">Content Chef</span></div>
           <${BrandSwitch} meta=${meta} brand=${brand} onPick=${pickBrand} onNew=${() => setNewBrand(true)} />
-          <nav class="tabs">
+          <nav class="tabs" aria-label="Main navigation">
             ${NAV.map(([id, ico, label]) => html`<button class=${tab === id ? 'on' : ''} onClick=${() => setTab(id)}><${Icon} name=${ico} size=${15} />${label}</button>`)}
           </nav>
           <div class="top-actions">
+            ${window.desktop?.showLauncher && html`<button class="btn small ghost" onClick=${() => window.desktop.showLauncher()}>Launcher</button>`}
             <${AiActivity} />
             <button class="icon-btn" title=${dark ? 'Light mode' : 'Dark mode'} onClick=${() => saveSettings({ theme: dark ? 'light' : 'dark' })}><${Icon} name=${dark ? 'sun' : 'moon'} /></button>
             <button class="ask-btn" onClick=${() => dispatchEvent(new Event('chef:chat'))}><span class="spark"><${Icon} name="sparkles" size=${13} stroke=${2} /></span>Ask ${assistantName(settings)}</button>

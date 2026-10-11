@@ -23,6 +23,7 @@ import { draftBrand, acceptBrandDraft } from './brand-import.js';
 import { createBrand } from './core/brands.js';
 
 const PORT = Number(process.env.PORT ?? 4545);
+const APP_VERSION = JSON.parse(await fs.readFile(path.join(ROOT, 'package.json'), 'utf8')).version;
 const app = express();
 app.use(express.json({ limit: '20mb' }));
 app.use(express.static(path.join(ROOT, 'public')));
@@ -41,6 +42,7 @@ const stripDir = ({ dir, ...b }) => b;
 // ── Metadata ────────────────────────────────────────────────────────────────
 
 app.get('/api/meta', api(async () => ({
+  version: APP_VERSION,
   brands: (await listBrands()).map(stripDir),
   templates: describeTemplates(),
   categories: CATEGORIES,

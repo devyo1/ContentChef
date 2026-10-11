@@ -1,81 +1,107 @@
-// Content Chef desktop app. Starts the same local editor server in-process (localhost, a free
-// port) and shows it in a native window with an integrated title bar. User work lives in
-// Documents/Content Chef so the app folder can stay read-only.
-import { app, BrowserWindow, shell, ipcMain, nativeTheme } from 'electron';
+// Launcher and studio share a release, runtime, and local workspace.
+import { app, BrowserWindow, shell, ipcMain, nativeTheme, Menu, dialog } from 'electron';
+import electronUpdater from 'electron-updater';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createUpdater } from './updater.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-// Installed app: Documents/Content Chef. Running from source (`npm run desktop`): the project folder.
 if (app.isPackaged) process.env.CONTENT_CHEF_HOME ||= path.join(app.getPath('documents'), 'Content Chef');
-
-if (!app.requestSingleInstanceLock()) app.quit();
-
-let win = null;
-let server = null;
-const BG = { dark: '#09090c', light: '#eceef3' };
+const ownsLock = app.requestSingleInstanceLock();
+if (!ownsLock) app.quit();
+let launcher = null, studio = null, server = null, origin = null, updates = null;
+let quitting = false, opening = null;
 const overlay = (dark) => ({ color: '#00000000', symbolColor: dark ? '#eeeef3' : '#14141a', height: 58 });
-
-async function createWindow() {
-  // Imported after CONTENT_CHEF_HOME is set so the core picks up the right workspace.
-  const { startServer } = await import('../src/server.js');
-  const started = await startServer({ port: 0 });
-  server = started.server;
-  const dark = nativeTheme.shouldUseDarkColors;
-
-  win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 980,
-    minHeight: 620,
-    show: false,
-    title: 'Content Chef',
-    backgroundColor: dark ? BG.dark : BG.light,
-    icon: path.join(here, '..', 'build', 'icon.png'),
-    // Integrated title bar: the app's own top bar doubles as the window's drag area.
+const focus = (win) => { if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); } };
+function openExternal(url) {
+  try { if (['http:', 'https:'].includes(new URL(url).protocol)) void shell.openExternal(url); } catch { /* not a web link */ }
+}
+function makeWindow(isLauncher) {
+  const dark = isLauncher || nativeTheme.shouldUseDarkColors;
+  const win = new BrowserWindow({
+    width: isLauncher ? 1140 : 1440, height: isLauncher ? 790 : 900,
+    minWidth: isLauncher ? 800 : 980, minHeight: isLauncher ? 680 : 620,
+    show: false, title: isLauncher ? 'Content Chef Launcher' : 'Content Chef',
+    backgroundColor: dark ? '#09090c' : '#eceef3', icon: path.join(here, '..', 'build', 'icon.png'),
     titleBarStyle: 'hidden',
     ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 18, y: 21 } } : { titleBarOverlay: overlay(dark) }),
-    webPreferences: {
-      preload: path.join(here, 'preload.cjs'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      spellcheck: true,
-    },
+    webPreferences: { preload: path.join(here, isLauncher ? 'launcher-preload.cjs' : 'preload.cjs'),
+      contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: !isLauncher },
   });
-
-  win.loadURL(`http://127.0.0.1:${started.port}/`);
-  win.once('ready-to-show', () => win.show());
-
-  // Links that open new windows (exported files, docs) go to the system browser / viewer.
-  win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
-  // Never navigate the app window away from the editor.
-  win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith(`http://127.0.0.1:${started.port}`)) { e.preventDefault(); shell.openExternal(url); }
+  win.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: 'deny' }; });
+  win.webContents.on('will-navigate', (event, url) => {
+    const expected = `${origin}/${isLauncher ? 'launcher.html' : ''}`;
+    if (url !== expected) { event.preventDefault(); openExternal(url); }
+  });
+  return win;
+}
+async function openStudio() {
+  if (studio && !studio.isDestroyed()) { focus(studio); launcher?.hide(); return; }
+  if (opening) return opening;
+  opening = (async () => {
+    studio = makeWindow(false);
+    const window = studio;
+    window.on('closed', () => { studio = null; if (!quitting) focus(launcher); });
+    try { await window.loadURL(`${origin}/`); focus(window); launcher?.hide(); }
+    catch (err) { window.destroy(); throw err; }
+  })().finally(() => { opening = null; });
+  return opening;
+}
+function fromWindow(event, win, pathname) {
+  return win && !win.isDestroyed() && event.sender === win.webContents
+    && event.senderFrame === win.webContents.mainFrame && event.senderFrame.url === `${origin}${pathname}`;
+}
+function handle(channel, work) {
+  ipcMain.handle(channel, async (event) => {
+    if (!fromWindow(event, launcher, '/launcher.html')) throw new Error('Unknown launcher window');
+    return work();
   });
 }
-
-// The page tells us its theme so the native window buttons match.
-ipcMain.on('theme', (_e, dark) => {
-  if (!win) return;
-  win.setBackgroundColor(dark ? BG.dark : BG.light);
-  if (process.platform !== 'darwin') win.setTitleBarOverlay?.(overlay(dark));
+ipcMain.on('theme', (event, dark) => {
+  if (!fromWindow(event, studio, '/')) return;
+  studio.setBackgroundColor(dark ? '#09090c' : '#eceef3');
+  if (process.platform !== 'darwin') studio.setTitleBarOverlay(overlay(!!dark));
 });
-
-app.on('second-instance', () => {
-  if (!win) return;
-  if (win.isMinimized()) win.restore();
-  win.focus();
-});
-
-app.whenReady().then(createWindow);
-
-app.on('window-all-closed', async () => {
-  try {
-    const { closeBrowser } = await import('../src/core/index.js');
-    await closeBrowser();
-  } catch { /* nothing to close */ }
-  server?.close();
-  app.quit();
-});
-
-app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+ipcMain.on('launcher:show', (event) => { if (fromWindow(event, studio, '/')) focus(launcher); });
+async function start() {
+  await app.whenReady();
+  const { startServer } = await import('../src/server.js');
+  const { HOME } = await import('../src/core/paths.js');
+  const started = await startServer({ port: 0 });
+  server = started.server;
+  origin = `http://127.0.0.1:${started.port}`;
+  launcher = makeWindow(true);
+  launcher.on('close', (event) => {
+    if (studio && !studio.isDestroyed() && !quitting) { event.preventDefault(); launcher.hide(); focus(studio); }
+  });
+  updates = createUpdater({ updater: electronUpdater.autoUpdater, packaged: app.isPackaged, version: app.getVersion(),
+    supported: process.platform !== 'linux' || !!process.env.APPIMAGE,
+    emit: (state) => { if (launcher && !launcher.isDestroyed()) launcher.webContents.send('launcher:update', state); },
+  });
+  handle('launcher:state', () => ({ version: app.getVersion(), packaged: app.isPackaged, platform: process.platform, workspace: HOME, update: updates.status() }));
+  handle('launcher:open', openStudio);
+  handle('launcher:workspace', async () => { const error = await shell.openPath(HOME); if (error) throw new Error(error); });
+  handle('launcher:check', () => updates.check());
+  handle('launcher:install', () => {
+    if (studio && !studio.isDestroyed()) throw new Error('Close the studio before restarting to update.');
+    return updates.install();
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    { label: 'Content Chef', submenu: [
+      { label: 'Launcher', click: () => focus(launcher) },
+      { label: 'Open studio', click: () => { void openStudio().catch((e) => dialog.showErrorBox('Could not open studio', e.message)); } },
+      { type: 'separator' }, { role: 'quit' },
+    ] },
+    { role: 'editMenu' }, { role: 'viewMenu' },
+  ]));
+  await launcher.loadURL(`${origin}/launcher.html`);
+  focus(launcher);
+  void updates.check();
+}
+app.on('second-instance', () => focus(studio ?? launcher));
+app.on('activate', () => focus(studio ?? launcher));
+app.on('before-quit', () => { quitting = true; });
+app.on('will-quit', () => { updates?.dispose(); server?.close(); void import('../src/core/renderer.js').then((m) => m.closeBrowser()).catch(() => {}); });
+app.on('window-all-closed', () => app.quit());
+if (ownsLock) void start().catch((err) => { dialog.showErrorBox('Content Chef could not start', err.message); app.quit(); });

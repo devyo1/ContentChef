@@ -137,7 +137,7 @@ input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px}
 .menu button:hover,.menu button.on{background:var(--hover)}
 .menu hr{border:0;border-top:1px solid var(--line);margin:4px 0}
 .tabs{display:flex;gap:2px;padding:4px;border-radius:13px;background:var(--surface);border:1px solid var(--line);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);box-shadow:var(--shadow-sm);margin:0 auto;min-width:0;overflow-x:auto}
-.tabs button{display:flex;align-items:center;gap:7px;border:0;background:none;padding:6px 13px;border-radius:9px;cursor:pointer;color:var(--text-2);font-weight:550;white-space:nowrap}
+.tabs button{display:flex;flex-shrink:0;align-items:center;gap:7px;border:0;background:none;padding:6px 13px;border-radius:9px;cursor:pointer;color:var(--text-2);font-weight:550;white-space:nowrap}
 .tabs button:hover{color:var(--text)}
 .tabs button.on{background:var(--surface-solid);color:var(--text);box-shadow:var(--shadow-sm)}
 :root[data-theme="dark"] .tabs button.on{background:var(--surface-3)}
@@ -496,6 +496,13 @@ textarea.paste{font-family:var(--mono);font-size:12.5px;margin:10px 0}
 .desktop .topbar{-webkit-app-region:drag;padding-right:150px;user-select:none}
 .desktop.os-darwin .topbar{padding-left:88px;padding-right:14px}
 .desktop .topbar button,.desktop .topbar .menu,.desktop .topbar input,.desktop .topbar a{-webkit-app-region:no-drag}
+.topbar.nav-wrapped{height:auto;min-height:58px;flex-wrap:wrap;padding-top:10px;padding-bottom:10px}
+.topbar.nav-wrapped .top-actions{margin-left:auto}
+.topbar.nav-wrapped .tabs{order:3;flex:1 0 100%;width:100%;margin:0;justify-content:center;flex-wrap:wrap;overflow:visible}
+.topbar.nav-wrapped .tabs button{flex:0 0 auto;justify-content:center}
+/* Native window controls only occupy the first row; center the second row across the window. */
+.desktop .topbar.nav-wrapped .tabs{flex-basis:calc(100% + 136px);width:calc(100% + 136px);margin-right:-136px}
+.desktop.os-darwin .topbar.nav-wrapped .tabs{flex-basis:calc(100% + 74px);width:calc(100% + 74px);margin-left:-74px;margin-right:0}
 
 /* One / Several switch */
 .seg.mini{padding:2px;border-radius:9px}

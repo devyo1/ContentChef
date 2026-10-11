@@ -25,7 +25,8 @@ npm test           # unit tests (fast, no browser)
 | `src/website-scan.js`, `src/brand-import.js` | Public website/CSS extraction, isolated rendering for JS-only pages, validated AI brand drafts and explicit creation. |
 | `src/server.js` | Local web server for the editor (binds to localhost only). |
 | `public/` | The editor UI: Preact + htm, no build step. |
-| `electron/` | The desktop app shell. |
+| `electron/` | Launcher, desktop windows, isolated IPC bridges and release updater. |
+| `public/launcher.html`, `public/launcher.css`, `public/js/launcher.js` | Launcher UI using the studio's existing stylesheet and tokens. |
 | `tests/` | Unit tests (`node --test`). |
 
 ## Adding a template

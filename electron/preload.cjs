@@ -5,4 +5,5 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
   setDark: (dark) => ipcRenderer.send('theme', !!dark),
+  showLauncher: () => ipcRenderer.send('launcher:show'),
 });

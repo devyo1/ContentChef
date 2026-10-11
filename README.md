@@ -17,7 +17,11 @@ Grab the installer for your system from the **[Releases](../../releases)** page:
 | macOS | `Content-Chef-x.y.z-mac-*.dmg` |
 | Linux | `Content-Chef-x.y.z-linux-*.AppImage` |
 
-Install, open, done. There's no terminal and nothing else to install. Your brands and exports live in **Documents/Content Chef**.
+Install, open the **Content Chef launcher**, and press **Open studio**. There's no terminal and nothing else to install. Your brands and exports live in **Documents/Content Chef**.
+
+The launcher checks GitHub Releases on startup and every four hours. Stable updates download in the background and update **both the launcher and studio** together. Choose **Restart to update** after closing the studio, or let the update install when you quit. If you're offline or a download fails, the installed version stays available. Your brands, exports, settings and Codex login are separate from the installation.
+
+Use **Launcher** in the studio's top bar to return to update status or open your workspace folder. Closing the studio also returns to the launcher. Windows installers and Linux AppImages support automatic updates; macOS updates require signed releases.
 
 > The first export downloads a rendering engine if your computer has neither Edge nor Chrome (one-off, about 150 MB).
 
@@ -68,11 +72,18 @@ npm install
 npm run setup      # rendering engine (one-off)
 npm start          # editor in your browser → http://localhost:4545
 npm run desktop    # or in the desktop window
+npm run launcher   # open the launcher and launch the studio from it
 npm test
 npm run dist:win   # build an installer (dist:mac / dist:linux)
 ```
 
 From source, your work lives in the project folder (`brands/`, `catalog/`, `templates/`, `output/`, `data/`, all git-ignored). On first run these are seeded from `examples/`.
+
+The launcher can also be previewed at `http://localhost:4545/launcher.html` with `npm start`. Browser/source previews identify themselves as development builds and never install updates over your checkout.
+
+### Publishing automatic updates
+
+Increase `package.json` and lockfile versions together, then push a matching `vX.Y.Z` tag. The Release workflow builds installers and update manifests in a **draft** GitHub Release. Publish the draft only once every platform's artifacts are uploaded. Installed launchers discover published stable releases from `devyo1/ContentChef`; ordinary source commits and draft releases do not trigger updates. Keep the generated `latest*.yml`, blockmaps and installers together, and include the macOS ZIP (required for updating). Add signing/notarization secrets before distributing signed macOS builds. No GitHub token is included in the application.
 
 ## CLI
 

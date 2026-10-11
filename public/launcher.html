@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-src 'none'">
+  <title>Content Chef · Launcher</title>
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="launcher.css">
+</head>
+<body class="launcher-page">
+  <header class="launch-titlebar">
+    <a class="launch-brand" href="launcher.html" aria-label="Content Chef launcher"><img src="logo.svg" alt="" width="28" height="28">Content Chef<span>LAUNCHER</span></a>
+    <span class="launch-channel" id="channel">LOCAL STUDIO</span>
+  </header>
+  <main class="launch-main">
+    <section class="launch-intro">
+      <div><p class="launch-eyebrow">YOUR CREATIVE HOME BASE</p><h1>Good ideas. <span>Ready to cook.</span></h1></div>
+      <a class="launch-text-link" href="https://github.com/devyo1/ContentChef/releases" target="_blank" rel="noreferrer">What’s new <span aria-hidden="true">↗</span></a>
+    </section>
+    <section class="launch-hero">
+      <div class="launch-hero-copy">
+        <div class="launch-status"><i></i> YOUR STUDIO, ON YOUR COMPUTER</div>
+        <h2>From a spark<br>to <em>on-brand.</em></h2>
+        <p>Bring your website. Find your look.<br>Make content that feels like you.</p>
+        <div class="launch-primary-row"><button class="launch-open" id="open-studio">Open studio <span aria-hidden="true">↗</span></button><span class="launch-version" id="hero-version">Content Chef</span></div>
+        <p class="launch-open-note" id="open-note">Your brands and projects are ready when you are.</p>
+      </div>
+      <div class="launch-art" aria-label="Illustration of a brand palette becoming social content" role="img">
+        <div class="launch-orbit orbit-one"></div><div class="launch-orbit orbit-two"></div>
+        <div class="launch-art-label"><span></span> A LITTLE IDEATION. A LOT OF POSSIBILITY.</div>
+        <div class="launch-mini-kit"><div class="launch-mini-top">BRAND INGREDIENTS <span>↗</span></div><div class="launch-swatches"><i></i><i></i><i></i><i></i></div><div class="launch-type"><strong>Aa</strong><span>Your voice.<br>Your visual world.</span></div></div>
+        <div class="launch-ad"><span class="launch-ad-eyebrow">MADE TO STAND OUT</span><strong>Fresh<br>thinking.<br><em>Served daily.</em></strong><div class="launch-ad-bottom"><span>GOOD THINGS<br>START HERE.</span><span class="launch-ad-arrow">↗</span></div></div>
+        <div class="launch-art-tag"><span>✦</span> One brand. Every format.</div>
+      </div>
+    </section>
+    <div class="launch-lower">
+      <section class="launch-card launch-updates" aria-labelledby="updates-title">
+        <div class="launch-card-top"><h2 id="updates-title"><span class="launch-card-icon" aria-hidden="true">↓</span> Always getting better</h2><span class="launch-badge" id="update-badge">Checking setup</span></div>
+        <p id="update-message" aria-live="polite">Getting your launcher ready…</p>
+        <div class="launch-progress" id="update-progress" role="progressbar" aria-label="Update download" aria-valuemin="0" aria-valuemax="100" hidden><div></div></div>
+        <div class="launch-update-bottom"><span id="update-detail">Launcher + studio update together.</span><button class="launch-text-button" id="check-updates" disabled>Check for updates <span aria-hidden="true">↻</span></button><button class="btn primary small" id="install-update" hidden>Restart to update</button></div>
+      </section>
+      <section class="launch-card launch-workspace" aria-labelledby="workspace-title">
+        <div class="launch-card-top"><h2 id="workspace-title"><span class="launch-card-icon" aria-hidden="true">⌘</span> Your workspace</h2><span class="launch-badge good">LOCAL</span></div>
+        <div class="launch-workspace-stats"><div><strong id="brand-count">—</strong><span>brands</span></div><div><strong id="assistant-name">AI</strong><span id="assistant-status">checking connection</span></div></div>
+        <div class="launch-workspace-bottom"><span id="workspace-location">Your work stays on this computer.</span><button class="launch-text-button" id="open-workspace" hidden>Open folder ↗</button></div>
+      </section>
+    </div>
+    <p class="launch-error" id="action-error" role="alert" hidden></p>
+    <footer class="launch-footer"><span><i></i> A little less busywork. A lot more you.</span><span id="footer-version">CONTENT CHEF</span></footer>
+  </main>
+  <script type="module" src="js/launcher.js"></script>
+</body>
+</html>

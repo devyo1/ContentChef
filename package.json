@@ -1,6 +1,6 @@
 {
   "name": "content-chef",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Brand-aware content studio: design ads and value posts once, export every size as PNG/JPG/MP4. Desktop app, CLI, and an MCP connector for ChatGPT, Codex and Claude.",
   "type": "module",
@@ -15,17 +15,19 @@
     "brands": "node src/cli.js brands",
     "formats": "node src/cli.js formats",
     "setup": "npx playwright install chromium",
-    "test": "node --test tests/core.test.js tests/codex.test.js tests/settings.test.js tests/brand-import.test.js tests/mcp.test.js",
+    "test": "node --test tests/core.test.js tests/codex.test.js tests/settings.test.js tests/brand-import.test.js tests/mcp.test.js tests/updater.test.js",
     "desktop": "electron .",
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --win --publish never",
     "dist:mac": "electron-builder --mac --publish never",
-    "dist:linux": "electron-builder --linux --publish never"
+    "dist:linux": "electron-builder --linux --publish never",
+    "launcher": "electron ."
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
     "@modelcontextprotocol/sdk": "^1.12.0",
     "cheerio": "^1.2.0",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.2",
     "ffmpeg-static": "^5.3.0",
     "htm": "^3.1.1",
@@ -89,11 +91,14 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Content Chef"
+      "shortcutName": "Content Chef",
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ],
       "category": "public.app-category.graphics-design",
       "icon": "build/icon.png"
@@ -104,6 +109,14 @@
       ],
       "category": "Graphics",
       "icon": "build/icon.png"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "devyo1",
+        "repo": "ContentChef",
+        "releaseType": "draft"
+      }
+    ]
   }
 }
