@@ -29,8 +29,10 @@ export function CarouselBuilderControls({ d, set }) {
     finally { setBusy(false); }
   };
   return html`<div class="builder-carousel-controls">
-    <div class="row"><button class="btn ai grow" onClick=${() => setModal('build')}><${Icon} name="sparkles" />${d.slides?.length ? 'Build a new carousel' : 'Build from a brief / website'}</button>
-      <button class="btn small" onClick=${() => { refresh(); setModal('load'); }}>Saved carousels</button></div>
+    <div class="carousel-actions">
+      <button class="btn ai wide" onClick=${() => setModal('build')}><${Icon} name="sparkles" />${d.slides?.length ? 'Build a new carousel' : 'Build from a brief or website'}</button>
+      <button class="btn small ghost wide" onClick=${() => { refresh(); setModal('load'); }}><${Icon} name="folder" size=${14} />Saved carousels</button>
+    </div>
     ${d.slides?.length > 0 && html`<div class="builder-slide-select"><label class="field"><span class="field-label">Slide to edit</span><select aria-label="Slide to edit" value=${d.slideIndex} onChange=${e => set(prev => selectCarouselSlide(prev, Number(e.target.value)))}>${d.slides.map((s, i) => html`<option value=${i}>${i + 1}. ${s.content.headline || 'Untitled'}${i === d.slides.length - 1 ? ' · CTA' : ''}</option>`)}</select></label>
       <button class="btn small ai wide" disabled=${!assistantReady(settings)} onClick=${() => { setError(''); setSuggestion(null); setModal('refine'); }}><${Icon} name="sparkles" size=${14} />Rewrite slide ${d.slideIndex + 1} with ${assistantName(settings)}</button></div>`}
     ${modal === 'build' && html`<${Modal} title="Build your carousel" wide onClose=${close}><${CarouselSetup} onCreated=${open} onCancel=${close} /><//>`}

@@ -765,3 +765,7 @@ textarea.paste{font-family:var(--mono);font-size:12.5px;margin:10px 0}
 .image-connection { margin: 12px 0; }
 .image-error { color: var(--danger, #db5757); overflow-wrap: anywhere; }
 .generated-background-preview { display: block; max-width: 100%; max-height: 420px; margin: 16px auto; border-radius: 12px; object-fit: contain; }
+/* Carousel builder actions: stacked so long labels never spill out of the panel */
+.carousel-actions{display:flex;flex-direction:column;gap:6px}
+.carousel-actions .btn{white-space:normal;text-align:center;min-width:0;line-height:1.25}
+.carousel-actions .btn.wide{margin-top:0}
