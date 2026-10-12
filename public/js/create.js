@@ -10,7 +10,7 @@ import { Icon } from './icons.js';
 import { glowColors } from './color.js';
 import { assistantName } from './assistant.js';
 import { BackgroundGenerator } from './image-generation.js';
-import { commitCarousel, selectCarouselSlide, carouselAds } from './carousel-design.js';
+import { commitCarousel, selectCarouselSlide, carouselAds, applyToAllSlides } from './carousel-design.js';
 import { CarouselBuilderControls } from './carousel-builder.js';
 
 export const PLATFORM_GROUPS = [
@@ -58,6 +58,8 @@ const FX_ICON = { glimmer: 'sparkles', holo: 'wand' };
 const isAnimated = (c) => (c.animation ?? 'none') !== 'none' || (c.effects ?? []).length > 0 || !!c.ctaFx || (c.decor ?? []).length > 0 || isVideo(c.background);
 // Which content field holds the text of each clickable element (for editing text in the inspector).
 const ROLE_TEXT = { headline: 'headline', offer: 'offer', eyebrow: 'eyebrow', subhead: 'subhead', cta: 'cta', attribution: 'attribution', footnote: 'footnote', clock: 'time', body: 'body', points: 'points', stat: 'stat', link: 'cta', handle: 'handle' };
+// The "look" of an ad (as opposed to its words): copied between carousel slides by "use this look on all slides".
+const LOOK_FIELDS = ['background', 'bgStyle', 'overlay', 'imageFocus', 'imageX', 'imageY', 'imageZoom', 'imageFlip', 'bgOverlay', 'align', 'decor', 'animation', 'effects', 'ctaFx', 'styles', 'formatStyles'];
 
 const nonEmpty = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== '' && v != null));
 const hasCopy = (r) => (r.headline ?? '').trim() || (r.offer ?? '').trim();
@@ -326,7 +328,7 @@ function WordsStep({ d, set, setContent, extras, usedFields }) {
 
 // ── Step 2: Look ─────────────────────────────────────────────────────────────
 
-function LookStep({ d, set, setContent, previewContent }) {
+function LookStep({ d, set, setContent: setThisOne, previewContent }) {
   const { meta, brand, reload } = useApp();
   const [editColours, setEditColours] = useState(false);
   const [generator, setGenerator] = useState(false);
@@ -335,12 +337,27 @@ function LookStep({ d, set, setContent, previewContent }) {
   const [imageGenerator, setImageGenerator] = useState(false);
   const c = d.content;
   const pal = brand.palettes[d.palettes[0]];
+  // Carousels: look changes go to the slide being edited, or to every slide when "All slides" is on.
+  const multiSlide = d.mode === 'carousel' && (d.slides?.length ?? 0) > 1;
+  const [allSlides, setAllSlides] = useState(store.get('look.allSlides', false));
+  useEffect(() => store.set('look.allSlides', allSlides), [allSlides]);
+  const everySlide = multiSlide && allSlides;
+  const setContent = everySlide ? (patch) => set((prev) => applyToAllSlides(prev, { content: patch })) : setThisOne;
+  const lookPatch = (prev, patch) => (everySlide && (patch.palettes || patch.templates) ? applyToAllSlides(prev, patch) : patch);
   // Functional update so quick successive clicks never work from stale state.
   const toggle = (key, v) => set((prev) => {
-    if ((prev.pick?.[key] ?? 'one') === 'one') return { [key]: [v] };
+    if ((prev.pick?.[key] ?? 'one') === 'one') return lookPatch(prev, { [key]: [v] });
     const list = prev[key].includes(v) ? prev[key].filter((x) => x !== v) : [...prev[key], v];
-    return list.length ? { [key]: list } : {};
+    return list.length ? lookPatch(prev, { [key]: list }) : {};
   });
+  // One-off: copy this slide's current look (colours, template, background) to every slide.
+  const copyLookToAll = () => {
+    set((prev) => applyToAllSlides(prev, {
+      palettes: prev.palettes, templates: prev.templates,
+      content: Object.fromEntries(LOOK_FIELDS.map((k) => [k, prev.content[k]])),
+    }));
+    toast(`Applied this look to all ${d.slides.length} slides`);
+  };
   const setPick = (key, mode) => set((prev) => ({
     pick: { ...prev.pick, [key]: mode },
     ...(mode === 'one' && prev[key].length > 1 ? { [key]: [prev[key][0]] } : {}),
@@ -372,6 +389,13 @@ function LookStep({ d, set, setContent, previewContent }) {
   const font = brand.fonts?.display?.family;
   return html`
     <${Section} n="2" title="Look" hint="Templates, colours and background">
+      ${multiSlide && html`
+        <div class="slide-scope">
+          <span class="small muted">Changes apply to</span>
+          <${Segmented} value=${allSlides ? 'all' : 'one'} onChange=${(v) => setAllSlides(v === 'all')}
+            options=${[{ value: 'one', label: `Slide ${(d.slideIndex ?? 0) + 1} only` }, { value: 'all', label: `All ${d.slides.length} slides` }]} />
+          ${!allSlides && html`<button class="link-btn" onClick=${copyLookToAll} title="Copy this slide's colours, template, background, text styles and motion to every slide (words stay as they are)">Use this slide's look on all slides</button>`}
+        </div>`}
       <h4 class="h-row">Templates <${PickMode} value=${d.pick?.templates} onChange=${(m) => setPick('templates', m)} />
         <span class="push"><button class="btn small soft" onClick=${() => setBrowse('templates')}><${Icon} name="grid" size=${14} /> Browse all ${meta.templates.length}</button></span></h4>
       ${many('templates') && html`<p class="tip">${plural(d.templates.length, 'template')} selected: every ad is made in each one.</p>`}
@@ -444,7 +468,7 @@ function LookStep({ d, set, setContent, previewContent }) {
           try {
             await api('PUT', `/api/brand/${brand.id}`, { ...brandForSave(brand), palettes: { ...brand.palettes, [k]: p } });
             await reload();
-            set((prev) => ({ palettes: prev.pick?.palettes === 'many' ? [...prev.palettes, k] : [k] }));
+            set((prev) => lookPatch(prev, { palettes: prev.pick?.palettes === 'many' ? [...prev.palettes, k] : [k] }));
             setGenerator(false);
             toast(`Added “${label}” to ${brand.name}`);
           } catch (e) { toast(e.message, 'err'); }
@@ -1001,6 +1025,10 @@ function Inspector({ role, d, setContent, set, focus, onClose, scope, setScope, 
         <span class="faint small">${scope === 'format' ? `Only changes ${fmtName}` : 'Applies to every size and template'}</span>
         ${Object.keys(st).length > 0 && html`<button class="btn small ghost" onClick=${() => setSt(Object.fromEntries(Object.keys(st).map((k) => [k, undefined])))}><${Icon} name="reset" size=${13} /> Reset</button>`}
       </div>
+      ${d.mode === 'carousel' && (d.slides?.length ?? 0) > 1 && html`
+        <button class="btn small soft wide" title="Give every slide this slide's text styling (colours, fonts, sizes, positions)"
+          onClick=${() => { set((prev) => applyToAllSlides(prev, { content: { styles: prev.content.styles, formatStyles: prev.content.formatStyles } })); toast(`Text styles copied to all ${d.slides.length} slides`); }}>
+          Use these text styles on all ${d.slides.length} slides</button>`}
     </div>`;
 }
 

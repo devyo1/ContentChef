@@ -779,3 +779,5 @@ textarea.paste{font-family:var(--mono);font-size:12.5px;margin:10px 0}
 .logo-btn{border:0;padding:2px;margin:-2px;background:none;border-radius:10px;cursor:pointer;display:grid;transition:background .15s,transform .15s}
 .logo-btn:hover{background:var(--hover);transform:scale(1.04)}
 .ai-pill.idle{width:32px;padding:0;justify-content:center}
+.slide-scope{display:flex;flex-direction:column;gap:6px;padding:10px;margin-bottom:12px;border-radius:var(--r-sm);background:var(--accent-soft)}
+.slide-scope .link-btn{align-self:flex-start}

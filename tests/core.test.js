@@ -15,6 +15,7 @@ import { splitDate } from '../src/core/templates/event.js';
 import { chatLines } from '../src/core/templates/chat.js';
 import { menuItem } from '../src/core/templates/menu.js';
 import { clientLabel } from '../src/core/activity.js';
+import { applyToAllSlides } from '../public/js/carousel-design.js';
 
 test('generated palettes are readable in every mood', () => {
   for (const mood of Object.keys(MOODS)) {
@@ -140,4 +141,14 @@ test('activity feed names the connected AI', () => {
   assert.equal(clientLabel('openai-mcp'), 'ChatGPT');
   assert.equal(clientLabel('my-custom-agent'), 'My Custom Agent');
   assert.equal(clientLabel(undefined), 'AI');
+});
+
+test('carousel: a look change can go to every slide without touching their words', () => {
+  const slide = (id, headline) => ({ id, content: { headline }, templates: ['carousel-slide'], palettes: ['p1'] });
+  const d = { mode: 'carousel', slideIndex: 1, slides: [slide('a', 'A'), slide('b', 'B'), slide('c', 'C')], content: { headline: 'B' }, templates: ['carousel-slide'], palettes: ['p1'], variants: [] };
+  const r = applyToAllSlides(d, { palettes: ['p9'], content: { bgStyle: 'dots' } });
+  assert.deepEqual(r.slides.map((s) => s.palettes[0]), ['p9', 'p9', 'p9']);
+  assert.deepEqual(r.slides.map((s) => s.content.headline), ['A', 'B', 'C']);
+  assert.ok(r.slides.every((s) => s.content.bgStyle === 'dots'));
+  assert.equal(r.content.headline, 'B');
 });

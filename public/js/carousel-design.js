@@ -24,3 +24,20 @@ export function carouselToDesign(c) {
     pick: { templates: 'one', palettes: 'one' }, output: { type: 'png', scale: 1, still: true, video: false }, captions: {},
     carousel: { id: c.id, revision: c.revision, brief: c.brief, website: c.website || '', ctaMode: c.ctaMode || 'manual' } });
 }
+/**
+ * Apply a look change to every slide (not just the one being edited): palettes, templates
+ * and/or content fields (background, bgStyle, align, styles…; undefined/'' removes a field).
+ */
+export function applyToAllSlides(design, { palettes, templates, content } = {}) {
+  const d = commitCarousel(design);
+  if (d?.mode !== 'carousel' || !d.slides?.length) return d;
+  const merge = (c) => {
+    if (!content) return c;
+    const out = { ...c, ...content };
+    for (const [k, v] of Object.entries(content)) if (v === undefined || v === '') delete out[k];
+    return out;
+  };
+  const slides = d.slides.map((s) => ({ ...s, ...(palettes ? { palettes: [...palettes] } : {}), ...(templates ? { templates: [...templates] } : {}), content: merge(s.content) }));
+  const cur = slides[d.slideIndex];
+  return commitCarousel({ ...d, slides, content: { ...cur.content }, templates: [...cur.templates], palettes: [...cur.palettes] });
+}
