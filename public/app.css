@@ -769,3 +769,13 @@ textarea.paste{font-family:var(--mono);font-size:12.5px;margin:10px 0}
 .carousel-actions{display:flex;flex-direction:column;gap:6px}
 .carousel-actions .btn{white-space:normal;text-align:center;min-width:0;line-height:1.25}
 .carousel-actions .btn.wide{margin-top:0}
+/* Top bar: compact tabs before wrapping; logo doubles as the launcher button; "by RCM" credit */
+.topbar.nav-compact .tabs button:not(.on) .lbl{display:none}
+.topbar.nav-compact .tabs button{padding:6px 10px}
+.topbar.nav-compact .logo .word{display:none}
+.logo .word{display:flex;flex-direction:column;line-height:1.05}
+.logo .by-rcm{font:600 9px/1.4 var(--mono);letter-spacing:.14em;color:var(--text-3);text-decoration:none;opacity:.75;align-self:flex-start;transition:color .15s,opacity .15s}
+.logo .by-rcm:hover{opacity:1;color:var(--accent-ink)}
+.logo-btn{border:0;padding:2px;margin:-2px;background:none;border-radius:10px;cursor:pointer;display:grid;transition:background .15s,transform .15s}
+.logo-btn:hover{background:var(--hover);transform:scale(1.04)}
+.ai-pill.idle{width:32px;padding:0;justify-content:center}

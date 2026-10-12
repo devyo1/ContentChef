@@ -79,25 +79,32 @@ function App() {
   brandRef.current = brandId;
 
   // Measure the whole header, including desktop controls and changing AI activity labels.
-  // Give navigation its own row when it cannot fit, instead of clipping the last tab.
+  // Tabs go icon-only first, and get their own row only if even that cannot fit (never clipped).
   useEffect(() => {
     const header = headerRef.current;
     if (!header) return;
     const nav = header.querySelector('.tabs');
     const width = (el) => el.getBoundingClientRect().width;
     const px = (value) => Number.parseFloat(value) || 0;
-    const measure = () => {
+    const fits = () => {
       const h = getComputedStyle(header), n = getComputedStyle(nav);
       const buttons = [...nav.children];
       const navWidth = buttons.reduce((sum, el) => sum + width(el), 0) + px(n.columnGap) * (buttons.length - 1)
         + px(n.paddingLeft) + px(n.paddingRight) + px(n.borderLeftWidth) + px(n.borderRightWidth);
       const others = [...header.children].filter((el) => el !== nav);
-      const needed = navWidth + others.reduce((sum, el) => sum + width(el), 0) + px(h.columnGap) * others.length;
-      header.classList.toggle('nav-wrapped', needed > header.clientWidth - px(h.paddingLeft) - px(h.paddingRight));
+      return navWidth + others.reduce((sum, el) => sum + width(el), 0) + px(h.columnGap) * others.length
+        <= header.clientWidth - px(h.paddingLeft) - px(h.paddingRight);
     };
-    const observer = new ResizeObserver(measure);
+    // Tight window: first icon-only tabs (the open tab keeps its label), and only wrap to a second row if even that doesn't fit.
+    const layout = () => {
+      header.classList.remove('nav-compact', 'nav-wrapped');
+      if (fits()) return;
+      header.classList.add('nav-compact');
+      if (!fits()) header.classList.add('nav-wrapped');
+    };
+    const observer = new ResizeObserver(layout);
     [header, ...header.children, ...nav.children].forEach((el) => observer.observe(el));
-    measure();
+    layout();
     return () => observer.disconnect();
   }, [!!meta?.brands.length, !!settings]);
 
@@ -161,13 +168,17 @@ function App() {
     <${AppCtx.Provider} value=${ctx}>
       <div class="shell">
         <header class="topbar" ref=${headerRef}>
-          <div class="logo"><img class="mark-img" src="logo.svg" alt="" width="34" height="34" /><span class="word">Content Chef</span></div>
+          <div class="logo">
+            ${window.desktop?.showLauncher
+              ? html`<button class="logo-btn" title="Back to the launcher" onClick=${() => window.desktop.showLauncher()}><img class="mark-img" src="logo.svg" alt="Launcher" width="34" height="34" /></button>`
+              : html`<img class="mark-img" src="logo.svg" alt="" width="34" height="34" />`}
+            <span class="word">Content Chef<a class="by-rcm" href="https://realcitymedia.com" target="_blank" rel="noopener" title="Made by RealCityMedia">by RCM</a></span>
+          </div>
           <${BrandSwitch} meta=${meta} brand=${brand} onPick=${pickBrand} onNew=${() => setNewBrand(true)} />
           <nav class="tabs" aria-label="Main navigation">
-            ${NAV.map(([id, ico, label]) => html`<button class=${tab === id ? 'on' : ''} onClick=${() => setTab(id)}><${Icon} name=${ico} size=${15} />${label}</button>`)}
+            ${NAV.map(([id, ico, label]) => html`<button class=${tab === id ? 'on' : ''} title=${label} onClick=${() => setTab(id)}><${Icon} name=${ico} size=${15} /><span class="lbl">${label}</span></button>`)}
           </nav>
           <div class="top-actions">
-            ${window.desktop?.showLauncher && html`<button class="btn small ghost" onClick=${() => window.desktop.showLauncher()}>Launcher</button>`}
             <${AiActivity} />
             <button class="icon-btn" title=${dark ? 'Light mode' : 'Dark mode'} onClick=${() => saveSettings({ theme: dark ? 'light' : 'dark' })}><${Icon} name=${dark ? 'sun' : 'moon'} /></button>
             <button class="ask-btn" onClick=${() => dispatchEvent(new Event('chef:chat'))}><span class="spark"><${Icon} name="sparkles" size=${13} stroke=${2} /></span>Ask ${assistantName(settings)}</button>
@@ -183,7 +194,6 @@ function App() {
         </div>
       </div>
       ${newBrand && html`<${NewBrandModal} settings=${settings} onClose=${() => setNewBrand(false)} onCreated=${async (id) => { await reload(); pickBrand(id); setNewBrand(false); setTab('brands'); }} />`}
-      <a class="rcm-mark" href="https://realcitymedia.com" target="_blank" rel="noopener" title="Made by RealCityMedia">RCM</a>
       <${ChatWidget} key=${assistantProvider(settings)} />
       <${Toasts} />
     <//>`;

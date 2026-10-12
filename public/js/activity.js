@@ -34,11 +34,11 @@ export function AiActivity() {
   if (!items.length) return null;
   return html`
     <div class="ai-activity">
-      <button class="ai-pill ${live.length ? 'live' : recent ? 'recent' : ''}" onClick=${() => setOpen(!open)} title="What connected AIs have been doing">
+      <button class="ai-pill ${live.length ? 'live' : recent ? 'recent' : 'idle'}" onClick=${() => setOpen(!open)} title="AI activity: what connected AIs have been doing">
         <span class="dot"></span>
         ${live.length
           ? html`<span class="ellipsis"><b>${latest.who}</b> · ${label(latest.tool)}…</span>`
-          : html`<span class="ellipsis">${recent ? html`<b>${latest.who}</b> · ${label(latest.tool)}` : 'AI activity'}</span>`}
+          : recent && html`<span class="ellipsis"><b>${latest.who}</b> · ${label(latest.tool)}</span>`}
       </button>
       ${open && html`
         <div class="ai-feed" onClick=${(e) => e.stopPropagation()}>
