@@ -940,3 +940,4 @@ textarea.paste{font-family:var(--mono);font-size:12.5px;margin:10px 0}
 .pl-kit-text small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pl-kit-text .row{flex-wrap:wrap;gap:6px}
 .pl-making .spin,.pl-nu .spin,.planner .btn .spin{display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px;flex:none}
+.pl-autopost{display:flex;gap:8px;align-items:center;font-size:13px;cursor:pointer}.pl-autopost small{font-size:12px}

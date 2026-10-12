@@ -467,6 +467,26 @@ function PostKit({ p, onPosted }) {
   const byPlatform = {};
   for (const a of p.assets ?? []) (byPlatform[a.platform] ??= []).push(a);
   const [done, setDone] = useState({});
+  const [busy, setBusy] = useState(null);
+  const [autoPost, setAutoPost] = useState(store.get('planner.autoPost', false));
+  // Desktop app: true one-click publishing (the platform's composer opens with image + caption filled in).
+  const canPublish = (platform) => !!window.desktop?.publish && window.desktop.publishPlatforms?.includes(platform)
+    && (platform !== 'tiktok' || byPlatform[platform]?.[0]?.kind === 'video');
+  const publish = async (platform) => {
+    setBusy(platform);
+    try {
+      const r = await window.desktop.publish({ platform, files: byPlatform[platform].map((a) => a.file), caption: p.captions?.[platform] || p.caption || plain(p.headline), autoPost });
+      if (r.posted) { setDone((d) => ({ ...d, [platform]: 'posted' })); toast(`Posted to ${PLATFORM_NAME[platform]}`); }
+      else if (r.ok) { setDone((d) => ({ ...d, [platform]: true })); toast(`${PLATFORM_NAME[platform]} is ready: check it and press Post in that window`); }
+      else if (!r.closed) toast(`${PLATFORM_NAME[platform]}: ${r.error}. Finish it in that window.`, 'err');
+      return r;
+    } catch (e) { toast(e.message, 'err'); return null; } finally { setBusy(null); }
+  };
+  const publishAll = async () => {
+    const results = [];
+    for (const platform of Object.keys(byPlatform).filter(canPublish)) results.push(await publish(platform));
+    if (results.length && results.every((r) => r?.posted)) onPosted();
+  };
   const go = async (platform) => {
     const files = byPlatform[platform];
     const caption = p.captions?.[platform] || p.caption || plain(p.headline);
@@ -482,7 +502,9 @@ function PostKit({ p, onPosted }) {
   const drag = (e, a) => { if (window.desktop?.dragFile) { e.preventDefault(); window.desktop.dragFile(a.file); } else e.dataTransfer.setData('DownloadURL', `${a.kind === 'video' ? 'video/mp4' : 'image/png'}:${a.file.split('/').pop()}:${location.origin}${assetUrl(a)}`); };
   return html`
     <div class="pl-kit">
-      <div class="row between"><b>Post it</b><span class="muted small">Drag the image into the post, or press the button: it copies the image and opens the app</span></div>
+      <div class="row between"><b>Post it</b><span class="muted small">${window.desktop?.publish ? 'Publish opens the app with your image and caption already in' : 'Drag the image into the post, or press the button: it copies the image and opens the app'}</span></div>
+      ${window.desktop?.publish && Object.keys(byPlatform).filter(canPublish).length > 1 && html`
+        <button type="button" class="btn primary wide" disabled=${!!busy} onClick=${publishAll}><${Icon} name="send" size=${14} /> Publish to ${Object.keys(byPlatform).filter(canPublish).map((k) => PLATFORM_NAME[k]).join(', ')}</button>`}
       ${Object.entries(byPlatform).map(([platform, files]) => html`
         <div class="pl-kit-row ${done[platform] ? 'done' : ''}" key=${platform}>
           <div class="pl-kit-media">${files.slice(0, 5).map((a) => a.kind === 'video'
@@ -493,12 +515,16 @@ function PostKit({ p, onPosted }) {
             <b>${PLATFORM_NAME[platform] ?? platform}</b>
             <small class="muted">${files.length > 1 ? `${files.length} slides` : `${files[0].width ?? ''}×${files[0].height ?? ''}`} · ${(p.captions?.[platform] || p.caption || '').slice(0, 90)}${(p.captions?.[platform] || p.caption || '').length > 90 ? '…' : ''}</small>
             <div class="row">
-              <button type="button" class="btn small primary" onClick=${() => go(platform)}>${done[platform] ? 'Open again' : `Post on ${PLATFORM_NAME[platform] ?? platform}`} ↗</button>
+              ${canPublish(platform)
+                ? html`<button type="button" class="btn small primary" disabled=${!!busy} onClick=${() => publish(platform)}>${busy === platform ? html`<span class="spin"></span> Filling it in…` : done[platform] === 'posted' ? '✓ Posted' : done[platform] ? 'Publish again' : `Publish to ${PLATFORM_NAME[platform] ?? platform}`}</button>`
+                : html`<button type="button" class="btn small primary" onClick=${() => go(platform)}>${done[platform] ? 'Open again' : `Post on ${PLATFORM_NAME[platform] ?? platform}`} ↗</button>`}
               <button type="button" class="btn small" onClick=${() => navigator.clipboard.writeText(p.captions?.[platform] || p.caption || '').then(() => toast('Caption copied'))}>Copy caption</button>
               <a class="btn small ghost" href=${assetUrl(files[0])} download>Download</a>
             </div>
           </div>
         </div>`)}
+      ${window.desktop?.publish && html`<label class="pl-autopost"><input type="checkbox" checked=${autoPost} onChange=${(e) => { setAutoPost(e.target.checked); store.set('planner.autoPost', e.target.checked); }} />
+        Press Post for me <small class="muted">(otherwise you check it and press Post yourself)</small></label>`}
       <button type="button" class="btn soft wide" onClick=${onPosted}>✓ I've posted it</button>
     </div>`;
 }

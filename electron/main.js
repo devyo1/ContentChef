@@ -4,6 +4,7 @@ import electronUpdater from 'electron-updater';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createUpdater } from './updater.js';
+import { publishPost, openLogin, forgetLogins, RECIPES } from './publisher.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 if (app.isPackaged) process.env.CONTENT_CHEF_HOME ||= path.join(app.getPath('documents'), 'Content Chef');
@@ -77,11 +78,21 @@ ipcMain.on('file:drag', (event, rel) => {
   // Videos have no thumbnail here: use the app icon so the drag still shows something.
   event.sender.startDrag({ file, icon: (icon.isEmpty() ? nativeImage.createFromPath(path.join(here, '../build/icon.png')) : icon).resize({ width: 96 }) });
 });
-ipcMain.handle('file:copy-image', (event, rel) => {
+// One-click publishing: the studio asks for a post to go to a platform; files must be renders in output/.
+ipcMain.handle('publish:post', async (event, req) => {
+  if (!fromWindow(event, studio, '/')) throw new Error('Unknown window');
+  const files = (Array.isArray(req?.files) ? req.files : []).map(outputFile);
+  if (!files.length || files.some((f) => !f)) throw new Error('Nothing to publish');
+  if (!RECIPES[req.platform]) throw new Error(`Publishing to ${req.platform} isn't supported yet`);
+  return publishPost({ platform: req.platform, files, caption: String(req.caption ?? '').slice(0, 5000), autoPost: req.autoPost === true, parent: studio });
+});
+ipcMain.handle('publish:login', (event, platform) => { if (fromWindow(event, studio, '/')) openLogin(String(platform), { parent: studio }); });
+ipcMain.handle('publish:forget', (event) => (fromWindow(event, studio, '/') ? forgetLogins() : null));
+ipcMain.handle('file:copy-image', async (event, rel) => {
   const file = fromWindow(event, studio, '/') && outputFile(rel);
   const img = file && nativeImage.createFromPath(file);
   if (!img || img.isEmpty()) return false;
-  clipboard.writeImage(img);
+  await clipboard.writeImage(img);
   return true;
 });
 async function start() {

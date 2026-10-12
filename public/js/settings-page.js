@@ -139,6 +139,7 @@ export function SettingsPage() {
 
         <${ImageSettings} />
         <${GoogleCalendarSettings} />
+        <${PublishingSettings} />
         <section class="card">
           <h3>Use Content Chef from other AI apps</h3>
           <p>Content Chef is also an MCP connector. Codex, Claude Desktop, Claude Code or another MCP client can use the same tools. Changes show up here live.</p>
@@ -212,5 +213,21 @@ function GoogleCalendarSettings() {
           <div class="row end"><button class="btn" disabled=${!id.trim()} onClick=${saveClient}>Save</button></div>
         </details>`
       : g.ownClient && html`<p class="small muted">Using your own Google sign-in app. <button class="link-btn" onClick=${() => setOwn(true)}>Change</button></p>`}
+    </section>`;
+}
+
+const PUBLISH_NAMES = { instagram: 'Instagram', facebook: 'Facebook', x: 'X', linkedin: 'LinkedIn', tiktok: 'TikTok', pinterest: 'Pinterest' };
+/** Desktop app: sign in to each platform once, so "Publish" can open its composer with the post filled in. */
+function PublishingSettings() {
+  if (!window.desktop?.publishLogin) return null;
+  return html`
+    <section class="card">
+      <h3>Publishing</h3>
+      <p>"Publish" in the Planner opens the platform in a Content Chef window with your image and caption already in, ready to post. Log in to each platform here once; you stay logged in. Your logins stay on this computer and are separate from your web browser.</p>
+      <div class="row" style=${{ flexWrap: 'wrap', gap: '8px' }}>
+        ${window.desktop.publishPlatforms.map((k) => html`<button class="btn" key=${k} onClick=${() => window.desktop.publishLogin(k)}>Log in to ${PUBLISH_NAMES[k] ?? k}</button>`)}
+      </div>
+      <p class="small muted">Signing in with Google inside the app may be blocked by Google; use your email and password for that platform instead.
+        <button class="link-btn" onClick=${async () => { if (confirm('Log out of every platform in Content Chef?')) { await window.desktop.publishForget(); toast('Logged out of all platforms'); } }}>Log out of all</button></p>
     </section>`;
 }
