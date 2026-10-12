@@ -1,7 +1,8 @@
-// Dashboard: every brand at a glance (with a live preview of what you last made for it),
-// saved campaigns and recent exports, in one grid.
+// Dashboard, organised around your work: quick actions, the design you're in the middle of,
+// everything you've made recently (exports, carousels, saved campaigns), then your brands.
 import { html, useState, useEffect, api, store, useApp, AdFrame, plural, toast } from './lib.js';
 import { Icon } from './icons.js';
+import { carouselToDesign } from './carousel-design.js';
 
 const ago = (ms) => {
   const s = (Date.now() - ms) / 1000;
@@ -10,96 +11,132 @@ const ago = (ms) => {
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
   return `${Math.round(s / 86400)} d ago`;
 };
+const plain = (s) => String(s ?? '').replace(/[*_|]/g, ' ').replace(/\s+/g, ' ').trim();
+const greeting = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; };
+const KIND = { export: ['download', 'Export'], carousel: ['layers', 'Carousel'], campaign: ['folder', 'Saved campaign'] };
 
-/** What to show for a brand: the design last worked on in this browser, else a simple sample. */
-function brandPreview(brand, meta) {
-  const saved = store.get(`design.${brand.id}`);
-  const known = new Set(meta.templates.map((t) => t.id));
-  const template = [].concat(saved?.templates ?? brand.defaults?.templates ?? []).find((t) => known.has(t)) ?? 'headline';
-  const palette = [].concat(saved?.palettes ?? []).find((p) => brand.palettes[p]) ?? Object.keys(brand.palettes)[0];
-  const content = saved?.content?.headline
-    ? { ...saved.content, animation: 'none', effects: undefined, ctaFx: undefined }
-    : { eyebrow: brand.handle || brand.name, headline: brand.tagline ? `${brand.tagline}` : 'Say it *big*.', cta: 'Shop now' };
-  return { template, palette, content, edited: !!saved?.content?.headline };
+/** The design you were last working on for a brand (newest of this browser's copy and the shared one). */
+function currentDesign(brandId, workspace) {
+  const local = store.get(`design.${brandId}`);
+  const localAt = store.get(`designAt.${brandId}`, 0);
+  if (workspace?.brand === brandId && workspace.design && (workspace.updatedAt ?? 0) >= localAt) return { design: workspace.design, focus: workspace.focus ?? {}, at: workspace.updatedAt };
+  return local ? { design: local, focus: store.get(`focus.${brandId}`, {}), at: localAt } : null;
 }
 
 export function DashboardPage() {
-  const { meta, pickBrand, setTab, openNewBrand, setPending } = useApp();
-  // Load an export's design back into the builder (exact design if saved with it, else rebuilt).
-  const reopen = async (e) => {
-    try {
-      const r = await api('GET', `/api/exports/design?dir=${encodeURIComponent(e.dir)}`);
-      if (!meta.brands.some((b) => b.id === r.brand)) throw new Error(`The brand "${r.brand}" no longer exists`);
-      setPending({ brand: r.brand, design: r.design });
-      pickBrand(r.brand);
-      setTab('create');
-      toast(r.from === 'saved' ? `Opened "${e.campaign}" in the builder` : `Opened "${e.campaign}" (rebuilt from the export)`);
-    } catch (err) { toast(err.message, 'err'); }
-  };
+  const { meta, brand, pickBrand, setTab, openNewBrand, setPending, workspace } = useApp();
   const [cats, setCats] = useState(null);
   const [exportsList, setExports] = useState(null);
+  const [carousels, setCarousels] = useState(null);
   useEffect(() => {
     api('GET', '/api/catalogs').then(setCats).catch(() => setCats([]));
     api('GET', '/api/exports').then(setExports).catch(() => setExports([]));
+    Promise.all(meta.brands.map((b) => api('GET', `/api/carousels?brand=${encodeURIComponent(b.id)}`).then((l) => l.map((c) => ({ ...c, brand: b.id }))).catch(() => [])))
+      .then((ls) => setCarousels(ls.flat())).catch(() => setCarousels([]));
   }, []);
-  const go = (id, tab) => { pickBrand(id); setTab(tab); };
-  const fmt = meta.formats['ig-portrait'];
+  const brandName = (id) => meta.brands.find((b) => b.id === id)?.name ?? id;
+  const openDesign = (brandId, design, msg) => {
+    setPending({ brand: brandId, design });
+    pickBrand(brandId);
+    setTab('create');
+    if (msg) toast(msg);
+  };
+
+  // Quick actions open Create in the right mode, keeping the copy you already have.
+  const cur = currentDesign(brand.id, workspace);
+  const startMode = (mode) => {
+    const d = cur?.design ?? {};
+    if (mode === 'carousel' && !d.slides?.length) {
+      return openDesign(brand.id, { ...d, mode, variants: [], templates: ['carousel-slide'], formats: [d.formats?.[0] || 'ig-portrait'], carousel: {}, slides: [] });
+    }
+    return openDesign(brand.id, { ...d, mode });
+  };
+
+  // Everything recent in one list, newest first.
+  const reopenExport = async (e) => {
+    try {
+      const r = await api('GET', `/api/exports/design?dir=${encodeURIComponent(e.dir)}`);
+      if (!meta.brands.some((b) => b.id === r.brand)) throw new Error(`The brand "${r.brand}" no longer exists`);
+      openDesign(r.brand, r.design, r.from === 'saved' ? `Opened "${e.campaign}" in the builder` : `Opened "${e.campaign}" (rebuilt from the export)`);
+    } catch (err) { toast(err.message, 'err'); }
+  };
+  const openCarousel = async (c) => {
+    try { openDesign(c.brand, carouselToDesign(await api('GET', `/api/carousels/${c.id}`)), `Opened carousel "${c.title}"`); } catch (err) { toast(err.message, 'err'); }
+  };
+  const loading = exportsList === null || carousels === null || cats === null;
+  const recent = loading ? [] : [
+    ...exportsList.filter((e) => e.ads > 0).map((e) => ({ kind: 'export', key: `e:${e.dir}`, title: e.campaign, brand: e.brand, at: e.modified, thumb: e.thumb, meta: plural(e.files, 'file'), open: () => reopenExport(e), folder: () => api('POST', '/api/open', { path: e.dir }) })),
+    ...carousels.map((c) => ({ kind: 'carousel', key: `c:${c.id}`, title: c.title, brand: c.brand, at: c.updatedAt, meta: plural(c.count, 'slide'), open: () => openCarousel(c) })),
+    ...cats.map((c) => ({ kind: 'campaign', key: `s:${c.name}`, title: c.campaign ?? c.name, brand: c.brand, at: 0, meta: plural(c.items.length, 'ad'), open: () => { pickBrand(c.brand); setTab('saved'); } })),
+  ].sort((a, b) => b.at - a.at).slice(0, 12);
+
+  const fmtId = cur?.focus?.format && meta.formats[cur.focus.format] ? cur.focus.format : cur?.design?.formats?.[0] ?? 'ig-square';
+  const curContent = cur?.design && (cur.design.mode === 'carousel' && cur.design.slides?.length
+    ? cur.design.slides[cur.design.slideIndex ?? 0]?.content
+    : cur.design.mode === 'bulk' ? { ...cur.design.content, ...(cur.design.rows ?? []).find((r) => (r.headline ?? '').trim()) } : cur.design.content);
+  const known = new Set(meta.templates.map((t) => t.id));
+  const curTemplate = [cur?.focus?.template, ...(cur?.design?.templates ?? [])].find((t) => known.has(t)) ?? 'headline';
+  const curPalette = [cur?.focus?.palette, ...(cur?.design?.palettes ?? [])].find((p) => brand.palettes[p]) ?? Object.keys(brand.palettes)[0];
+  const modeLabel = { single: 'One ad', bulk: 'Bulk ads', carousel: 'Carousel' }[cur?.design?.mode] ?? 'One ad';
+
   return html`
     <div class="page"><div class="page-inner dash">
       <div class="dash-head">
-        <div><h2>Dashboard</h2><p class="muted">${plural(meta.brands.length, 'brand')} · ${plural(cats?.length ?? 0, 'saved campaign')} · ${plural(exportsList?.length ?? 0, 'export')}</p></div>
-        <button class="btn primary" onClick=${openNewBrand}><${Icon} name="plus" size=${15} /> New brand</button>
+        <div><h2>${greeting()}</h2><p class="muted">What are we cooking for ${brand.name} today?</p></div>
       </div>
 
-      <h4>Brands</h4>
-      <div class="dash-grid">
-        ${meta.brands.map((b) => {
-          const pv = brandPreview(b, meta);
-          const campaigns = (cats ?? []).filter((c) => c.brand === b.id).length;
-          const exps = (exportsList ?? []).filter((e) => e.brand === b.id);
-          return html`
-            <div class="dash-card" key=${b.id}>
-              <button type="button" class="dash-preview" onClick=${() => go(b.id, 'create')} title="Open in Create">
-                <${AdFrame} still req=${{ brand: b.id, template: pv.template, palette: pv.palette, format: 'ig-portrait', formatInfo: fmt, content: pv.content }} fit=${{ width: 200, height: 250 }} />
-              </button>
-              <div class="dash-info">
-                <div class="row between nowrap"><b class="ellipsis">${b.name}</b><span class="swatch-row">${Object.values(b.palettes).slice(0, 5).map((p, i) => html`<i key=${i} style=${{ background: `linear-gradient(135deg, ${p.bg} 50%, ${p.accent} 50%)` }}></i>`)}</span></div>
-                <small class="muted ellipsis">${b.tagline || b.handle || ' '}</small>
-                <small class="faint">${plural(Object.keys(b.palettes).length, 'colourway')} · ${plural(b.assets.filter((a) => !/logo/i.test(a)).length, 'photo/video')} · ${plural(campaigns, 'campaign')}${exps[0] ? ` · exported ${ago(exps[0].modified)}` : ''}</small>
-                <div class="row">
-                  <button class="btn small primary" onClick=${() => go(b.id, 'create')}><${Icon} name="sparkles" size=${13} /> Create</button>
-                  <button class="btn small" onClick=${() => go(b.id, 'brands')}>Brand kit</button>
-                </div>
-              </div>
-            </div>`;
-        })}
-        <button type="button" class="dash-card dash-new" onClick=${openNewBrand}><${Icon} name="plus" size=${26} /><span>New brand</span></button>
+      <div class="dash-actions">
+        <button class="dash-action" onClick=${() => startMode('single')}><span class="ic"><${Icon} name="sparkles" /></span><b>Create an ad</b><small>One message in every size</small></button>
+        <button class="dash-action" onClick=${() => startMode('carousel')}><span class="ic"><${Icon} name="layers" /></span><b>Build a carousel</b><small>A story across slides</small></button>
+        <button class="dash-action" onClick=${() => startMode('bulk')}><span class="ic"><${Icon} name="grid" /></span><b>Bulk ads</b><small>Many messages at once</small></button>
+        <button class="dash-action" onClick=${() => setTab('video')}><span class="ic"><${Icon} name="film" /></span><b>Edit a video</b><small>Trim and crop clips</small></button>
       </div>
 
-      <h4>Saved campaigns</h4>
-      ${cats === null ? html`<p class="muted">Loading…</p>` : cats.length === 0
-        ? html`<p class="muted small">Nothing saved yet. In Create, press <b>Save for later</b> to keep a campaign here.</p>`
-        : html`<div class="dash-list">${cats.map((c) => html`
-            <button type="button" class="dash-row" key=${c.name} onClick=${() => { pickBrand(c.brand); setTab('saved'); }}>
-              <span class="dash-dot"><${Icon} name="folder" size=${15} /></span>
-              <span class="grow ellipsis"><b>${c.campaign ?? c.name}</b> <span class="muted small">· ${meta.brands.find((b) => b.id === c.brand)?.name ?? c.brand}</span></span>
-              <span class="muted small">${plural(c.items.length, 'ad')}</span>
-            </button>`)}</div>`}
+      ${cur?.design && html`
+        <h4>Continue where you left off</h4>
+        <div class="dash-continue">
+          <button type="button" class="dash-continue-pic" onClick=${() => setTab('create')} title="Continue editing">
+            <${AdFrame} still req=${{ brand: brand.id, template: curTemplate, palette: curPalette, format: fmtId, formatInfo: meta.formats[fmtId], content: { ...curContent, animation: 'none', effects: undefined, ctaFx: undefined } }} fit=${{ width: 260, height: 220 }} />
+          </button>
+          <div class="dash-continue-info">
+            <span class="dash-kind"><${Icon} name="sparkles" size=${12} /> ${modeLabel} · ${brand.name}</span>
+            <h3 class="ellipsis">${plain(curContent?.headline) || 'Untitled design'}</h3>
+            <p class="muted small">${plural(cur.design.templates?.length ?? 1, 'template')} · ${plural(cur.design.palettes?.length ?? 1, 'colourway')} · ${plural(cur.design.formats?.length ?? 0, 'size')}${cur.at ? ` · edited ${ago(cur.at)}` : ''}</p>
+            <div class="row"><button class="btn primary" onClick=${() => setTab('create')}><${Icon} name="sparkles" size=${14} /> Continue editing</button></div>
+          </div>
+        </div>`}
 
-      <h4>Recent exports</h4>
-      ${exportsList === null ? html`<p class="muted">Loading…</p>` : exportsList.length === 0
-        ? html`<p class="muted small">No exports yet.</p>`
-        : html`<div class="dash-exports">${exportsList.slice(0, 12).map((e) => html`
-            <div class="dash-export" key=${e.dir}>
-              <button type="button" class="dash-export-pic" onClick=${() => reopen(e)} title="Open in the builder to reuse or change it">
-                ${e.thumb ? html`<img src=${e.thumb} loading="lazy" />` : html`<span class="noimg"><${Icon} name="film" /></span>`}
+      <h4>Recent work</h4>
+      ${loading ? html`<p class="muted">Loading…</p>` : recent.length === 0
+        ? html`<p class="muted small">Nothing yet. Exports, carousels and saved campaigns show up here so you can reopen and reuse them.</p>`
+        : html`<div class="dash-exports">${recent.map((w) => html`
+            <div class="dash-export" key=${w.key}>
+              <button type="button" class="dash-export-pic" onClick=${w.open} title="Open in the builder">
+                ${w.thumb ? html`<img src=${w.thumb} loading="lazy" />` : html`<span class="noimg kind-${w.kind}"><${Icon} name=${KIND[w.kind][0]} size=${22} /></span>`}
               </button>
-              <b class="ellipsis">${e.campaign}</b>
-              <small class="muted">${meta.brands.find((b) => b.id === e.brand)?.name ?? e.brand} · ${plural(e.files, 'file')} · ${ago(e.modified)}</small>
+              <span class="dash-kind"><${Icon} name=${KIND[w.kind][0]} size=${11} /> ${KIND[w.kind][1]}</span>
+              <b class="ellipsis">${w.title}</b>
+              <small class="muted ellipsis">${brandName(w.brand)} · ${w.meta}${w.at ? ` · ${ago(w.at)}` : ''}</small>
               <div class="row nowrap">
-                ${e.ads > 0 && html`<button class="btn small primary grow" onClick=${() => reopen(e)}><${Icon} name="sparkles" size=${13} /> Edit in builder</button>`}
-                <button class="icon-btn" title="Open folder" onClick=${() => api('POST', '/api/open', { path: e.dir })}><${Icon} name="folder" size=${15} /></button>
+                <button class="btn small primary grow" onClick=${w.open}>${w.kind === 'campaign' ? 'Open' : 'Edit in builder'}</button>
+                ${w.folder && html`<button class="icon-btn" title="Open folder" onClick=${w.folder}><${Icon} name="folder" size=${15} /></button>`}
               </div>
             </div>`)}</div>`}
+
+      <h4 class="h-row">Brands <span class="push"><button class="btn small soft" onClick=${openNewBrand}><${Icon} name="plus" size=${14} /> New brand</button></span></h4>
+      <div class="dash-brands">
+        ${meta.brands.map((b) => html`
+          <div class="dash-brand ${b.id === brand.id ? 'on' : ''}" key=${b.id}>
+            <span class="dash-brand-mark" style=${{ background: Object.values(b.palettes)[0]?.accent }}>${b.name.trim()[0]}</span>
+            <div class="grow">
+              <b class="ellipsis">${b.name}</b>
+              <span class="swatch-row">${Object.values(b.palettes).slice(0, 6).map((p, i) => html`<i key=${i} style=${{ background: `linear-gradient(135deg, ${p.bg} 50%, ${p.accent} 50%)` }}></i>`)}</span>
+            </div>
+            <div class="row nowrap">
+              <button class="btn small primary" onClick=${() => { pickBrand(b.id); setTab('create'); }}>Create</button>
+              <button class="btn small" onClick=${() => { pickBrand(b.id); setTab('brands'); }}>Brand kit</button>
+            </div>
+          </div>`)}
+      </div>
     </div></div>`;
 }
