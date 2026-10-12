@@ -4,6 +4,8 @@ import electronUpdater from 'electron-updater';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createUpdater } from './updater.js';
+import { runtimeKey, findQuickUpdate, stageQuickUpdate, applyQuickUpdate, canQuickUpdate } from './quick-update.js';
+import fsp from 'node:fs/promises';
 import { publishPost, openLogin, forgetLogins, RECIPES } from './publisher.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -95,8 +97,28 @@ ipcMain.handle('file:copy-image', async (event, rel) => {
   await clipboard.writeImage(img);
   return true;
 });
+/** Code-only updates for installs that can update themselves in place (see quick-update.js). */
+async function quickUpdater() {
+  const appDir = app.getAppPath();
+  if (!app.isPackaged || !(await canQuickUpdate(appDir))) return null;
+  const stageDir = path.join(app.getPath('userData'), 'quick-update');
+  const backupDir = path.join(app.getPath('userData'), 'quick-update-backup');
+  const pkg = JSON.parse(await fsp.readFile(path.join(appDir, 'package.json'), 'utf8'));
+  return {
+    staged: () => fsp.access(path.join(stageDir, '.ready')).then(() => true, () => false),
+    find: () => findQuickUpdate({ currentVersion: app.getVersion(), runtime: runtimeKey(pkg, process.versions.electron), feed: process.env.CONTENT_CHEF_UPDATE_FEED }),
+    stage: (u, onProgress) => stageQuickUpdate(u, stageDir, { onProgress }),
+    apply: () => applyQuickUpdate(stageDir, appDir, backupDir),
+    relaunch: () => { quitting = true; app.relaunch(); app.exit(0); },
+  };
+}
 async function start() {
   await app.whenReady();
+  const quick = await quickUpdater().catch(() => null);
+  // An update downloaded last time but not restarted into: apply it now, then reopen.
+  if (quick && await quick.staged()) {
+    try { await quick.apply(); quick.relaunch(); return; } catch { /* keep the current version */ }
+  }
   const { startServer } = await import('../src/server.js');
   const { HOME, OUTPUT_DIR } = await import('../src/core/paths.js');
   outputDir = path.resolve(OUTPUT_DIR);
@@ -108,7 +130,7 @@ async function start() {
     if (studio && !studio.isDestroyed() && !quitting) { event.preventDefault(); launcher.hide(); focus(studio); }
   });
   updates = createUpdater({ updater: electronUpdater.autoUpdater, packaged: app.isPackaged, version: app.getVersion(),
-    supported: process.platform !== 'linux' || !!process.env.APPIMAGE,
+    supported: process.platform !== 'linux' || !!process.env.APPIMAGE, quick,
     emit: (state) => { if (launcher && !launcher.isDestroyed()) launcher.webContents.send('launcher:update', state); },
   });
   handle('launcher:state', () => ({ version: app.getVersion(), packaged: app.isPackaged, platform: process.platform, workspace: HOME, update: updates.status() }));

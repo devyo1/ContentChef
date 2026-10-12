@@ -40,7 +40,7 @@ test('release updates automatically download stable versions and install once wh
     assert.equal(controller.status().phase, 'ready');
     assert.equal(controller.install(), true);
     assert.equal(controller.install(), false);
-    assert.deepEqual(installs, [[false, true]]);
+    assert.deepEqual(installs, [[true, true]]); // silent install, then reopen
   } finally { controller.dispose(); }
 });
 test('concurrent checks coalesce and failed checks can be retried', async () => {

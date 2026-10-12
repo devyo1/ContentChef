@@ -6,14 +6,16 @@ let opening = false;
 function showError(error) { $('action-error').textContent = error.message || String(error); $('action-error').hidden = false; }
 function renderUpdate(state) {
   const { phase, nextVersion, percent, reason } = state;
-  const labels = { disabled: reason === 'development' ? 'SOURCE BUILD' : 'MANUAL UPDATES', idle: 'AUTO UPDATES ON', checking: 'CHECKING', current: 'UP TO DATE', downloading: 'DOWNLOADING', ready: 'UPDATE READY', error: 'CHECK AGAIN' };
+  const labels = { disabled: reason === 'development' ? 'SOURCE BUILD' : 'MANUAL UPDATES', idle: 'AUTO UPDATES ON', checking: 'CHECKING', current: 'UP TO DATE', downloading: 'DOWNLOADING', ready: 'UPDATE READY', installing: 'UPDATING', error: 'CHECK AGAIN' };
+  const quick = state.kind === 'quick';
   const messages = {
     disabled: reason === 'development' ? 'You’re running from source. Installed releases keep the launcher and studio updated automatically.' : 'Install the AppImage release to receive automatic updates on Linux.',
     idle: 'New releases download automatically. Keep creating while we take care of the rest.',
     checking: 'Looking for the latest launcher and studio release…',
     current: 'You’re on the latest release. We’ll check again automatically.',
     downloading: `Getting version ${nextVersion ?? ''} ready. You can keep using the studio.`,
-    ready: `Version ${nextVersion} is ready. Restart now, or it will install when you quit.`,
+    ready: quick ? `Version ${nextVersion} is ready. Restart to update: it takes a few seconds, no installer.` : `Version ${nextVersion} is ready. Restart to update: it installs in the background, then reopens.`,
+    installing: `Updating to ${nextVersion}… Content Chef reopens in a moment.`,
     error: state.error,
   };
   $('update-badge').textContent = labels[phase] ?? 'AUTO UPDATES';
@@ -26,7 +28,7 @@ function renderUpdate(state) {
   const progress = Math.round(Number(percent) || 0);
   $('update-progress').setAttribute('aria-valuenow', String(progress));
   $('update-progress').firstElementChild.style.width = `${progress}%`;
-  $('update-detail').textContent = phase === 'downloading' ? `${progress}% downloaded · launcher + studio` : 'Launcher + studio update together.';
+  $('update-detail').textContent = phase === 'downloading' ? `${progress}% downloaded · ${quick ? 'quick update' : 'launcher + studio'}` : 'Launcher + studio update together.';
 }
 async function getJson(url) { const res = await fetch(url); if (!res.ok) throw new Error('The local studio could not be reached. Try reopening Content Chef.'); return res.json(); }
 $('open-studio').addEventListener('click', async () => {

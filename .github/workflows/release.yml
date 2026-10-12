@@ -37,3 +37,10 @@ jobs:
           # Unsigned builds by default. Add signing secrets (CSC_LINK / CSC_KEY_PASSWORD, Apple
           # notarization) when you have certificates; see the electron-builder code-signing docs.
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Attach quick-update bundle
+        # Code-only update for installs already on this Electron + libraries (the launcher swaps it
+        # in without running the installer). Platform-independent, so one job uploads it.
+        if: matrix.os == 'ubuntu-latest'
+        run: node scripts/app-bundle.mjs --upload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
