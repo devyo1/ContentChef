@@ -16,6 +16,7 @@ import { chatLines } from '../src/core/templates/chat.js';
 import { menuItem } from '../src/core/templates/menu.js';
 import { clientLabel } from '../src/core/activity.js';
 import { applyToAllSlides } from '../public/js/carousel-design.js';
+import { planSlots, plannerIcs, Strategy } from '../src/planner.js';
 
 test('generated palettes are readable in every mood', () => {
   for (const mood of Object.keys(MOODS)) {
@@ -151,4 +152,25 @@ test('carousel: a look change can go to every slide without touching their words
   assert.deepEqual(r.slides.map((s) => s.content.headline), ['A', 'B', 'C']);
   assert.ok(r.slides.every((s) => s.content.bgStyle === 'dots'));
   assert.equal(r.content.headline, 'B');
+});
+
+test('planner: any posting rhythm, from once a week to several times a day', () => {
+  assert.equal(planSlots({ start: '2026-10-12', weeks: 2, days: [5], times: ['12:00'] }).length, 2); // once a week
+  const twiceDaily = planSlots({ start: '2026-10-12', weeks: 1, days: [1, 2, 3, 4, 5, 6, 7], times: ['09:00', '18:00'] });
+  assert.equal(twiceDaily.length, 14);
+  assert.deepEqual(twiceDaily.slice(0, 2), [{ date: '2026-10-12', time: '09:00' }, { date: '2026-10-12', time: '18:00' }]);
+  const s = Strategy.parse({ days: [5, 1, 1], times: ['18:00', '09:00'] });
+  assert.deepEqual([s.days, s.times], [[1, 5], ['09:00', '18:00']]);
+});
+
+test('planner: calendar file lists scheduled, unposted posts with a reminder', () => {
+  const ics = plannerIcs({ posts: [
+    { id: 'a', date: '2026-10-12', time: '09:00', platforms: ['instagram'], headline: 'Fresh *beans*', brief: 'b', caption: 'c', status: 'ready' },
+    { id: 'b', date: '2026-10-13', time: '09:00', platforms: [], headline: 'Done', brief: '', caption: '', status: 'posted' },
+    { id: 'c', date: null, time: '09:00', platforms: [], headline: 'Someday', brief: '', caption: '', status: 'idea' },
+  ] }, 'Northside');
+  assert.equal((ics.match(/BEGIN:VEVENT/g) ?? []).length, 1);
+  assert.match(ics, /DTSTART:20261012T090000/);
+  assert.match(ics, /SUMMARY:Post: Fresh beans \(instagram\)/);
+  assert.match(ics, /BEGIN:VALARM/);
 });

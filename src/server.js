@@ -23,6 +23,7 @@ import { draftBrand, acceptBrandDraft } from './brand-import.js';
 import { createBrand } from './core/brands.js';
 import { imageStatus, prepareBackground, generateBackground } from './background-images.js';
 import { connectHiggsfield, finishHiggsfield, disconnectHiggsfield, higgsfieldModels } from './higgsfield.js';
+import { getPlanner, savePlanner, planContent, plannerIcs, PLANNER_DIR } from './planner.js';
 import { listCarousels, loadCarousel, createCarousel, saveCarouselSlide, refineCarouselSlide, exportCarousel, saveCarouselDesign, generateCarouselDesign } from './carousels.js';
 
 const PORT = Number(process.env.PORT ?? 4545);
@@ -97,6 +98,20 @@ const progressApi = (work) => async (req, res) => {
 };
 app.post('/api/brand-import/draft', progressApi(draftBrand));
 app.post('/api/brand-import/create', api(async (req) => stripDir(await acceptBrandDraft(req.body))));
+// ── Content planner (strategy + calendar) ──
+app.get('/api/planner', api((req) => getPlanner(String(req.query.brand ?? ''))));
+app.put('/api/planner/:brand', api((req) => savePlanner(req.params.brand, req.body)));
+app.post('/api/planner/:brand/plan', api(async (req, res) => {
+  const controller = new AbortController(); res.on('close', () => controller.abort());
+  return planContent(req.params.brand, req.body, { signal: controller.signal });
+}));
+app.get('/api/planner/:brand/calendar.ics', async (req, res) => {
+  try {
+    const b = await loadBrand(req.params.brand);
+    res.type('text/calendar').set('content-disposition', `attachment; filename="${b.id}-content-plan.ics"`).send(plannerIcs(await getPlanner(b.id), b.name));
+  } catch (e) { res.status(400).type('text').send(e.message); }
+});
+
 app.get('/api/carousels', api((req) => listCarousels(req.query.brand)));
 app.get('/api/carousels/:id', api((req) => loadCarousel(req.params.id)));
 app.put('/api/carousels/:id/design', api(req => saveCarouselDesign(req.params.id, req.body)));
@@ -359,6 +374,7 @@ watchDir(DATA_DIR, {}, async (file) => {
 });
 watchDir(BRANDS_DIR, { recursive: true }, (file) => { if (!file.includes('.cache')) broadcast({ type: 'meta' }); });
 watchDir(CATALOG_DIR, {}, () => broadcast({ type: 'catalogs' }));
+watchDir(PLANNER_DIR, {}, (f) => broadcast({ type: 'planner', brand: f.replace(/.json.*$/, '') }));
 watchDir(TEMPLATES_DIR, {}, () => broadcast({ type: 'meta' })); // custom templates added / edited
 
 // ── Shared workspace (what's open in the editor) ────────────────────────────

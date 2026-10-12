@@ -3,6 +3,7 @@ import { CreatePage } from './create.js';
 import { BrandsPage } from './brand-editor.js';
 import { SavedPage } from './saved.js';
 import { DashboardPage } from './dashboard.js';
+import { PlannerPage, PlannerReminders } from './planner.js';
 import { VideoPage } from './video.js';
 import { AiActivity } from './activity.js';
 import { SettingsPage } from './settings-page.js';
@@ -13,6 +14,7 @@ import { NewBrandModal } from './new-brand.js';
 
 const NAV = [
   ['home', 'grid', 'Dashboard'],
+  ['planner', 'calendar', 'Planner'],
   ['create', 'sparkles', 'Create'],
   ['video', 'film', 'Video'],
   ['brands', 'palette', 'Brand kit'],
@@ -133,6 +135,7 @@ function App() {
       const e = JSON.parse(ev.data);
       if (e.type === 'meta') reload();
       if (e.type === 'activity') dispatchEvent(new Event('chef:activity'));
+      if (e.type === 'planner') dispatchEvent(new CustomEvent('chef:planner', { detail: e.brand }));
       if (e.type === 'workspace' && e.source !== CLIENT_ID) {
         const ws = await api('GET', '/api/workspace');
         setWorkspace(ws);
@@ -186,6 +189,7 @@ function App() {
         </header>
         <div class="main">
           ${tab === 'home' && html`<${DashboardPage} />`}
+          ${tab === 'planner' && html`<${PlannerPage} key=${brand.id} />`}
           ${tab === 'create' && html`<${CreatePage} key=${brand.id} />`}
           ${tab === 'video' && html`<${VideoPage} key=${brand.id} />`}
           ${tab === 'brands' && html`<${BrandsPage} key=${brand.id} />`}
@@ -195,6 +199,7 @@ function App() {
       </div>
       ${newBrand && html`<${NewBrandModal} settings=${settings} onClose=${() => setNewBrand(false)} onCreated=${async (id) => { await reload(); pickBrand(id); setNewBrand(false); setTab('brands'); }} />`}
       <${ChatWidget} key=${assistantProvider(settings)} />
+      <${PlannerReminders} />
       <${Toasts} />
     <//>`;
 }

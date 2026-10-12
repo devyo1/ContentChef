@@ -14,6 +14,7 @@ import {
   TEMPLATES, TEMPLATE_TOKENS, CUSTOM_FIELDS, DECOR_PRESETS, saveCustomTemplate, readCustomSpec, deleteCustomTemplate,
 } from './core/index.js';
 import { generatePalette, HARMONIES, MOODS } from '../public/js/color.js';
+import { getPlanner, upsertPosts, Post as PlannerPost, StrategyShape as PlannerStrategy } from './planner.js';
 import { prepareBackground, generateBackground } from './background-images.js';
 import { selectCarouselSlide, carouselAds } from '../public/js/carousel-design.js';
 import { generateCarouselDesign } from './carousels.js';
@@ -28,7 +29,7 @@ The user has the Content Chef builder open and wants to watch you work and then 
 4. Finish by telling them it's ready in the builder, what you made, and that they can tweak it or ask you to export.
 Do NOT render or export files (generate_ads, generate_bulk, export_editor, render_catalog) unless the user EXPLICITLY asks for files: "export", "render the files", "download", "make the PNGs/videos", "do it in the background". Those tools require confirmed_by_user: true, and only set it when the user actually said so. Even then, generate_ads / generate_bulk also load the set into the builder so the user can see it.
 
-Other tools: save_brand / add_library_palette / generate_palettes for brand colours, build_captions for captions, add_catalog_item / save_campaign to save campaigns for later, save_template to design new layouts.
+Other tools: save_brand / add_library_palette / generate_palettes for brand colours, build_captions for captions, add_catalog_item / save_campaign to save campaigns for later, save_template to design new layouts, get_planner / update_planner for the content calendar (plan posts as "idea"s for the user to review in the Planner tab).
 
 Copy markup inside headline/subhead/offer: *word* = accent colour, _word_ = italic, "|" = forced line break.
 Headlines auto-size to fill their space: shorter headlines look bolder (aim for 2–7 words).
@@ -674,6 +675,27 @@ tool('generate_palettes', 'Generate harmonious, contrast-checked colour palettes
   async ({ count, harmony, mood, locked }) => text(Array.from({ length: count }, () => generatePalette({ harmony, mood, locked: locked ?? {} }))));
 
 // ── Saved campaigns (catalogs) ──────────────────────────────────────────────
+
+// ── Content planner ─────────────────────────────────────────────────────────
+
+tool('get_planner', "Read a brand's content plan: strategy (goals, audience, content pillars, posts per week, platforms) and every planned post (date, time, platforms, pillar, format, status idea/draft/ready/posted, headline, brief, caption). The user sees this in the Planner tab.",
+  { brand: z.string() },
+  async ({ brand }) => text(await getPlanner(brand)));
+
+tool('update_planner',
+  `Change a brand's content plan; the user's Planner tab updates live. Strategy rhythm: days (1=Mon…7=Sun) and times ("HH:MM"), e.g. once a week = days [5], times ["12:00"]; twice a day = days [1..7], times ["09:00","18:00"]. Add or edit posts (pass id to edit; omit it to add), remove posts by id, and/or update the strategy.
+Post fields: date "YYYY-MM-DD" (or null = unscheduled idea), time "HH:MM", platforms [${Object.keys(PLATFORMS).join(', ')}], pillar, format single|carousel|bulk|video, status idea|draft|ready|posted, headline (on-image hook, *stars* for the key word), brief, caption, notes.
+To draft a whole plan, add posts with status "idea" spread over the coming weeks and tell the user to review them in the Planner. Don't mark anything posted unless the user says it was.`,
+  {
+    brand: z.string(),
+    posts: z.array(PlannerPost.partial()).optional(),
+    remove: z.array(z.string()).optional().describe('Post ids to delete'),
+    strategy: PlannerStrategy.partial().optional(),
+  },
+  async ({ brand, posts, remove, strategy }) => {
+    const p = await upsertPosts(brand, { posts, remove, strategy });
+    return text({ saved: true, posts: p.posts.length, strategy: p.strategy });
+  });
 
 tool('list_catalogs', 'List saved campaigns (catalogs) and their item ids.', {}, async () => text(await listCatalogs()));
 

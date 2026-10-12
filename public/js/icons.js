@@ -32,6 +32,7 @@ const P = {
   open: 'M14 3h7v7 M10 14L21 3 M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5',
   minimize: 'M5 12h14',
   bolt: 'M13 2L3 14h9l-1 8 10-12h-9z',
+  calendar: 'M4 5h16v15H4z M4 9h16 M8 3v4 M16 3v4',
   crop: 'M6 2v14a2 2 0 0 0 2 2h14 M18 22V8a2 2 0 0 0-2-2H2',
   undo: 'M9 14L4 9l5-5 M4 9h10.5a5.5 5.5 0 0 1 0 11H11',
   redo: 'M15 14l5-5-5-5 M20 9H9.5a5.5 5.5 0 0 0 0 11H13',
