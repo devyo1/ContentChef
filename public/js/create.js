@@ -737,6 +737,7 @@ function useQuickExport({ d, exporter, onFocus }) {
     exporter.start({
       mode: 'single', brand: brand.id, campaign: d.campaign || 'my-campaign', content: g.content,
       templates: [g.template], palettes: [g.palette], formats, type, scale: d.output.scale, video, gif, still,
+      imagesOnly: true, // quick export = just the file(s), no captions or manifest
       design: { ...d, mode: 'single', content: g.content, variants: [], templates: [g.template], palettes: [g.palette], formats },
     }, {
       label: `${g.label} · ${tname(g.template)} · ${formats.length > 1 ? plural(formats.length, 'size') : SHORT[formats[0]] ?? formats[0]}`,

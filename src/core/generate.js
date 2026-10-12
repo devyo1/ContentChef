@@ -52,7 +52,7 @@ async function plan({ brand, campaign = 'adhoc', id, content = {}, variants, tem
   return { b, campaign, itemId, dir, tpls, pals, fmts, vars, jobs };
 }
 
-async function execute(pl, { scale, type = 'png', quality, fps = 30, concurrency = 4, onProgress }) {
+async function execute(pl, { scale, type = 'png', quality, fps = 30, concurrency = 4, onProgress, imagesOnly = false }) {
   const { b, dir, jobs } = pl;
   await fs.mkdir(dir, { recursive: true });
   let done = 0;
@@ -93,17 +93,20 @@ async function execute(pl, { scale, type = 'png', quality, fps = 30, concurrency
   const platforms = [...new Set(pl.fmts.map((f) => FORMATS[f].platform))];
   const captions = pl.vars.map((v) => buildCaptions(b, v, platforms));
   const many = pl.vars.length > 1;
-  await fs.writeFile(path.join(dir, 'captions.json'), JSON.stringify(many ? captions : captions[0], null, 2));
-  await fs.writeFile(
-    path.join(dir, 'captions.md'),
-    captions.map((c, i) => `${many ? `# Variant ${i + 1}: ${pl.vars[i].headline}\n\n` : ''}${captionsMarkdown(c)}`).join('\n---\n\n'),
-  );
+  // imagesOnly (quick exports): just the image/video files, no captions or manifest next to them.
+  if (!imagesOnly) {
+    await fs.writeFile(path.join(dir, 'captions.json'), JSON.stringify(many ? captions : captions[0], null, 2));
+    await fs.writeFile(
+      path.join(dir, 'captions.md'),
+      captions.map((c, i) => `${many ? `# Variant ${i + 1}: ${pl.vars[i].headline}\n\n` : ''}${captionsMarkdown(c)}`).join('\n---\n\n'),
+    );
+  }
   const manifest = {
     brand: b.id, campaign: pl.campaign, id: pl.itemId, dir, generatedAt: new Date().toISOString(),
     templates: pl.tpls, palettes: pl.pals, formats: pl.fmts, variants: pl.vars.length,
     files, captions: many ? captions : captions[0], copy: pl.vars,
   };
-  await fs.writeFile(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  if (!imagesOnly) await fs.writeFile(path.join(dir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   return manifest;
 }
 

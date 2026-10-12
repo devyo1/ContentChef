@@ -192,10 +192,10 @@ function startJob(work) {
 }
 
 app.post('/api/jobs', api(async (req) => {
-  const { mode, brand, campaign, content, variants, rows, templates, palettes, formats, scale, type, video, gif, still, id, design } = req.body;
-  const common = { brand, campaign: campaign || 'my-campaign', templates, palettes, formats, scale: scale || undefined, type, video, gif, still: still !== false };
+  const { mode, brand, campaign, content, variants, rows, templates, palettes, formats, scale, type, video, gif, still, id, design, imagesOnly } = req.body;
+  const common = { brand, campaign: campaign || 'my-campaign', templates, palettes, formats, scale: scale || undefined, type, video, gif, still: still !== false, imagesOnly: !!imagesOnly };
   // Keep the exact editor design next to the files, so the export can be reopened and changed later.
-  const keepDesign = (dir) => design && fs.writeFile(path.join(dir, 'design.json'), JSON.stringify({ brand, design, savedAt: Date.now() }, null, 2)).catch(() => {});
+  const keepDesign = (dir) => design && !imagesOnly && fs.writeFile(path.join(dir, 'design.json'), JSON.stringify({ brand, design, savedAt: Date.now() }, null, 2)).catch(() => {});
   const job = startJob(async (onProgress) => {
     if (mode === 'carousel') {
       const r = await generateCarouselDesign({ brand, design: { ...design, output: { ...design.output, type, scale: scale || 1, video, gif, still: still !== false } }, generate, onProgress });
