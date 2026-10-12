@@ -47,7 +47,7 @@ jobs:
           shopt -s nullglob
           mkdir -p release-assets
           cd dist
-          for f in *.exe *.dmg *.zip *.AppImage *.blockmap latest*.yml app-update.json *-app.json.gz; do cp "$f" ../release-assets/; done
+          for f in *.exe *.dmg *.zip *.AppImage *.blockmap latest*.yml app-update.json *-app.json.gz; do if [ -f "$f" ]; then cp "$f" ../release-assets/; fi; done # app-update.json only exists on Linux
           ls -la ../release-assets
       - uses: actions/upload-artifact@v4
         with:
