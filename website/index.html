@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Content Chef</title>
+<meta name="description" content="Content Chef makes on-brand ads, carousels and posts in every platform size, with Claude or ChatGPT working alongside you. Free and open source.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@500&display=swap">
+<style>
+/* Layout: "the pass". A kitchen pass where finished plates (real ads) line up under order
+   tickets that name each platform size; the page then walks through the stations. */
+:root{
+  --bg:#F5F6F8; --surface:#FFFFFF; --sunk:#ECEEF2; --ink:#15171C; --muted:#5D6270; --faint:#8A8F9C; --line:rgba(21,23,28,.09);
+  --ember:#E5531A; --ember-ink:#B53D0A; --ember-soft:rgba(229,83,26,.10); --on-ember:#fff;
+  --idea:#7B68EE; --draft:#C9A227; --ready:#E5531A; --posted:#2E9E6B;
+  --display:"Bricolage Grotesque", "Arial Narrow", system-ui, sans-serif;
+  --body:"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"Geist Mono", ui-monospace, Consolas, monospace;
+  --r:14px; --shadow:0 1px 2px rgba(15,17,22,.06),0 12px 30px rgba(15,17,22,.08);
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101114; --surface:#17191E; --sunk:#1D2026; --ink:#ECEEF2; --muted:#A3A8B5; --faint:#6E7380; --line:rgba(255,255,255,.08);
+  --ember:#FF7A3D; --ember-ink:#FFA06E; --ember-soft:rgba(255,122,61,.13); --on-ember:#1A0D06;
+  --idea:#A497FF; --draft:#E2C254; --ready:#FF7A3D; --posted:#4CCB93;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.45); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101114; --surface:#17191E; --sunk:#1D2026; --ink:#ECEEF2; --muted:#A3A8B5; --faint:#6E7380; --line:rgba(255,255,255,.08);
+  --ember:#FF7A3D; --ember-ink:#FFA06E; --ember-soft:rgba(255,122,61,.13); --on-ember:#1A0D06;
+  --idea:#A497FF; --draft:#E2C254; --ready:#FF7A3D; --posted:#4CCB93;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 14px 34px rgba(0,0,0,.45); color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.6 var(--body);-webkit-font-smoothing:antialiased;padding-inline:20px}
+img{max-width:100%;display:block}
+a{color:inherit}
+.wrap{max-width:1180px;margin:0 auto}
+h1,h2,h3{font-family:var(--display);font-weight:800;letter-spacing:-.03em;line-height:1.02;text-wrap:balance;margin:0}
+h2{font-size:clamp(30px,4.2vw,50px)}
+h3{font-size:20px;letter-spacing:-.02em;font-weight:700}
+p{margin:0}
+.lede{font-size:clamp(17px,1.6vw,19px);color:var(--muted);max-width:56ch}
+.kicker{font:500 12px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ember-ink)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:12px;font-weight:600;font-size:15px;text-decoration:none;border:1px solid var(--line);background:var(--surface);transition:transform .15s,box-shadow .15s,background .15s}
+.btn:hover{transform:translateY(-1px);box-shadow:var(--shadow)}
+.btn:focus-visible,a:focus-visible{outline:2px solid var(--ember);outline-offset:3px}
+.btn.primary{background:var(--ember);border-color:var(--ember);color:var(--on-ember)}
+section{padding-block:clamp(56px,8vw,104px)}
+
+/* Header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:10;background:color-mix(in srgb,var(--bg) 82%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);margin-inline:-20px;padding:12px 20px;border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:20px}
+.brand{display:flex;align-items:center;gap:9px;font:800 18px/1 var(--display);letter-spacing:-.03em;text-decoration:none}
+.brand svg{width:32px;height:32px}
+.nav{display:flex;gap:22px;margin-left:auto;font-size:14px;color:var(--muted)}
+.nav a{text-decoration:none}
+.nav a:hover{color:var(--ink)}
+.top .btn{padding:8px 14px;font-size:14px}
+@media (max-width:760px){.nav{display:none}.top .btn{margin-left:auto}}
+
+/* Hero: the pass */
+.hero{padding-block:clamp(40px,6vw,80px) clamp(40px,6vw,72px)}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:clamp(28px,5vw,64px);align-items:center}
+.hero h1{font-size:clamp(46px,7vw,92px)}
+.hero h1 em{font-style:normal;color:var(--ember)}
+.hero .lede{margin:22px 0 30px}
+.cta-row{display:flex;flex-wrap:wrap;gap:10px}
+.fine{margin-top:16px;font:500 12.5px/1.5 var(--mono);color:var(--faint)}
+.pass{position:relative;display:grid;grid-template-columns:1fr .56fr;grid-template-rows:auto auto;gap:14px;align-items:end}
+.pass::before{content:"";position:absolute;left:-4%;right:-4%;bottom:-18px;height:10px;border-radius:99px;background:linear-gradient(90deg,transparent,var(--line),transparent)}
+.plate{position:relative;border-radius:12px;overflow:hidden;box-shadow:var(--shadow);background:var(--sunk);animation:plate .7s cubic-bezier(.2,.8,.2,1) both}
+.plate:nth-child(2){animation-delay:.08s}.plate:nth-child(3){animation-delay:.16s}
+.plate.square{grid-row:1}.plate.story{grid-row:1 / span 2;grid-column:2}.plate.wide{grid-column:1}
+@keyframes plate{from{transform:translateY(14px)}}
+.ticket{position:absolute;top:10px;left:10px;font:500 11px/1 var(--mono);letter-spacing:.04em;padding:6px 8px;border-radius:6px;background:var(--surface);color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.ticket b{color:var(--ember-ink);font-weight:500}
+@media (max-width:900px){.hero-grid{grid-template-columns:1fr}}
+
+/* Sizes */
+.split-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:end;margin-bottom:36px}
+.split-head .lede{justify-self:end}
+.sizes{display:flex;gap:16px;align-items:flex-end;overflow-x:auto;padding-bottom:6px}
+.size{flex:none;display:flex;flex-direction:column;gap:10px}
+.size img{border-radius:10px;box-shadow:var(--shadow);height:clamp(150px,22vw,280px);width:auto}
+.size figcaption{display:flex;justify-content:space-between;gap:12px;font:500 12px/1.3 var(--mono);color:var(--muted)}
+.size figcaption b{color:var(--ink);font-family:var(--body);font-weight:600;font-size:13px}
+.sizes-wrap{overflow-x:auto;margin-inline:-20px;padding-inline:20px}
+@media (max-width:760px){.split-head{grid-template-columns:1fr}.split-head .lede{justify-self:start}}
+
+/* Menu of templates */
+.menu{display:grid;grid-template-columns:minmax(0,.8fr) minmax(0,1.4fr);gap:clamp(24px,5vw,60px);align-items:start}
+.board{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:28px 28px 22px;box-shadow:var(--shadow)}
+.board h3{text-align:center;font-size:24px}
+.board .kicker{display:block;text-align:center;margin-bottom:8px}
+.board ul{list-style:none;padding:0;margin:20px 0 0;display:grid;gap:14px}
+.board li{display:grid;gap:3px}
+.board .row{display:flex;align-items:baseline;gap:8px;font-weight:600}
+.board .dots{flex:1;border-bottom:2px dotted var(--line);transform:translateY(-4px)}
+.board .row span:last-child{font:500 13px var(--mono);color:var(--ember-ink)}
+.board small{color:var(--muted);font-size:13.5px}
+.spread{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.spread figure{margin:0;display:flex;flex-direction:column;gap:8px}
+.spread img{border-radius:10px;box-shadow:var(--shadow);aspect-ratio:4/5;object-fit:cover;width:100%}
+.spread figcaption{font-size:13px;color:var(--muted)}
+.spread figcaption b{color:var(--ink);font-weight:600}
+@media (max-width:900px){.menu{grid-template-columns:1fr}}
+@media (max-width:520px){.spread{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* AI at the pass */
+.ai{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(28px,5vw,64px);align-items:center}
+.points{list-style:none;padding:0;margin:26px 0 0;display:grid;gap:14px}
+.points li{display:grid;grid-template-columns:22px 1fr;gap:10px;color:var(--muted)}
+.points li b{color:var(--ink);font-weight:600}
+.points li::before{content:"";width:9px;height:9px;margin-top:8px;border-radius:50%;background:var(--ember)}
+.feed{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:16px}
+.feed-head{display:flex;align-items:center;gap:10px;padding:4px 6px 12px;border-bottom:1px solid var(--line)}
+.pill{display:inline-flex;align-items:center;gap:8px;font-size:13px;padding:6px 12px;border-radius:99px;background:var(--ember-soft);color:var(--ember-ink);font-weight:600}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--ember);animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 6px var(--ember-soft)}}
+.feed ol{list-style:none;margin:8px 0 0;padding:0;display:grid}
+.feed li{display:grid;grid-template-columns:20px 1fr auto;gap:10px;padding:10px 6px;border-radius:10px;font-size:14px}
+.feed li+li{border-top:1px solid var(--line)}
+.feed li small{display:block;color:var(--muted);font-size:12.5px}
+.feed time{font:500 11.5px var(--mono);color:var(--faint)}
+.ok{color:var(--posted)}
+.spin{width:12px;height:12px;margin-top:5px;border-radius:50%;border:2px solid var(--line);border-top-color:var(--ember);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (max-width:900px){.ai{grid-template-columns:1fr}}
+
+/* Planner */
+.planner{background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:18px;overflow-x:auto}
+.pl-top{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
+.rhythm{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12.5px;padding:5px 11px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+.chip.on{background:var(--ember);border-color:var(--ember);color:var(--on-ember)}
+.week{display:grid;grid-template-columns:56px repeat(5,minmax(120px,1fr));gap:6px;min-width:700px}
+.dow{text-align:center;font:500 11px/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding-bottom:4px}
+.dow b{display:block;font:800 20px/1.1 var(--display);letter-spacing:-.02em;color:var(--ink)}
+.t{font:500 11.5px var(--mono);color:var(--faint);text-align:right;padding:10px 6px 0 0}
+.cell{min-height:88px;border-radius:12px;background:var(--sunk);padding:6px;display:flex}
+.cell.open{background:transparent;border:1.5px dashed var(--line);align-items:center;justify-content:center;font-size:12px;color:var(--faint)}
+.post{flex:1;border-radius:9px;background:var(--surface);padding:8px 9px;box-shadow:inset 3px 0 0 var(--st),0 1px 2px rgba(0,0,0,.06);display:flex;flex-direction:column;gap:3px}
+.post span{font:600 10.5px/1 var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--st)}
+.post b{font-size:13px;line-height:1.25}
+.post small{color:var(--faint);font-size:11.5px}
+.idea{--st:var(--idea)}.draft{--st:var(--draft)}.ready{--st:var(--ready)}.posted{--st:var(--posted)}
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:28px}
+.trio div{display:grid;gap:6px}
+.trio p{color:var(--muted);font-size:15px}
+@media (max-width:760px){.trio{grid-template-columns:1fr}}
+
+/* Steps */
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:36px;counter-reset:step}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px;display:grid;gap:8px;align-content:start}
+.step::before{counter-increment:step;content:counter(step);font:800 34px/1 var(--display);color:var(--ember)}
+.step p{color:var(--muted);font-size:15px}
+@media (max-width:900px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:520px){.steps{grid-template-columns:1fr}}
+
+/* Download */
+.serve{background:var(--ink);color:var(--bg);border-radius:24px;padding:clamp(28px,5vw,56px);display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:28px;align-items:center}
+.serve h2{color:var(--bg)}
+.serve p{color:color-mix(in srgb,var(--bg) 70%,transparent);margin-top:12px;max-width:52ch}
+.dl{display:grid;gap:10px}
+.dl a{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 16px;border-radius:12px;background:color-mix(in srgb,var(--bg) 8%,transparent);border:1px solid color-mix(in srgb,var(--bg) 16%,transparent);text-decoration:none;color:var(--bg);font-weight:600}
+.dl a:hover{background:color-mix(in srgb,var(--bg) 14%,transparent)}
+.dl small{font:500 12px var(--mono);opacity:.7}
+@media (max-width:760px){.serve{grid-template-columns:1fr}}
+footer{padding-block:28px 40px;display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;color:var(--faint);font-size:13.5px}
+footer a{text-decoration:none;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="#top" aria-label="Content Chef home">
+    <svg viewBox="0 0 64 64" aria-hidden="true"><defs><linearGradient id="p" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FF7A30"/><stop offset="1" stop-color="#C2410C"/></linearGradient><linearGradient id="q" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFE2C7"/><stop offset="1" stop-color="#FFB074"/></linearGradient></defs><path d="M15.5 37.5C11 28 15 17.5 24 13" fill="none" stroke="#FF8A3D" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="0.1 5.2" opacity=".75"/><g transform="rotate(24 33 15)"><rect x="24" y="6.5" width="18" height="16" rx="4.2" fill="url(#q)"/><rect x="27.6" y="10.8" width="10.5" height="2.8" rx="1.4" fill="#E5531A"/><rect x="27.6" y="16" width="6.6" height="2.8" rx="1.4" fill="#E5531A" opacity=".75"/></g><g transform="rotate(-14 30 46)"><path d="M42 47.5L61 43" stroke="url(#p)" stroke-width="5.4" stroke-linecap="round"/><path d="M5 45.5h38c0 7.8-5.8 12.5-13.5 12.5h-11C10.8 58 5 53.3 5 45.5z" fill="url(#p)"/><ellipse cx="24" cy="45.5" rx="19" ry="3.6" fill="#FFA060"/><ellipse cx="24" cy="45.8" rx="15.5" ry="2.2" fill="#B8380A"/></g></svg>
+    Content Chef
+  </a>
+  <nav class="nav" aria-label="Sections"><a href="#sizes">Every size</a><a href="#templates">Templates</a><a href="#ai">AI</a><a href="#planner">Planner</a></nav>
+  <a class="btn primary" href="https://github.com/devyo1/ContentChef/releases/latest">Download</a>
+</div></header>
+
+<main id="top">
+  <section class="hero"><div class="wrap hero-grid">
+    <div>
+      <span class="kicker">Free desktop app · Windows, Mac, Linux</span>
+      <h1 style="margin-top:16px">Plate up a week of <em>on-brand</em> content.</h1>
+      <p class="lede">Write the message once. Content Chef cooks it into ads, carousels and posts for every platform, in your fonts and colours, with Claude or ChatGPT working right beside you in the builder.</p>
+      <div class="cta-row">
+        <a class="btn primary" href="https://github.com/devyo1/ContentChef/releases/latest">Download Content Chef</a>
+        <a class="btn" href="https://github.com/devyo1/ContentChef">View on GitHub</a>
+      </div>
+      <p class="fine">Open source · MIT licence · your brands stay on your computer</p>
+    </div>
+    <div class="pass" aria-label="Examples made with Content Chef">
+      <figure class="plate square" style="margin:0"><img src="img/hero-square.jpg" alt="Coffee shop ad: Slow mornings, better coffee" width="720" height="720"><span class="ticket"><b>IG</b> 1080 × 1080</span></figure>
+      <figure class="plate story" style="margin:0"><img src="img/hero-story.jpg" alt="Gym story styled as an iPhone notification" width="405" height="720"><span class="ticket"><b>Story</b> 1080 × 1920</span></figure>
+      <figure class="plate wide" style="margin:0"><img src="img/hero-wide.jpg" alt="Product spotlight ad for coffee beans" width="720" height="405"><span class="ticket"><b>X</b> 1600 × 900</span></figure>
+    </div>
+  </div></section>
+
+  <section id="sizes"><div class="wrap">
+    <div class="split-head">
+      <div><span class="kicker">Every size</span><h2 style="margin-top:12px">One recipe, plated for every platform.</h2></div>
+      <p class="lede">Headlines resize themselves to fill each layout. Story and TikTok sizes keep copy clear of the app's buttons. Export PNG, JPG, MP4 or looping GIF, plus captions written to each platform's limits.</p>
+    </div>
+    <div class="sizes-wrap"><div class="sizes">
+      <figure class="size" style="margin:0"><img src="img/size-ig.jpg" alt="Instagram square version" width="720" height="720"><figcaption><b>Instagram post</b><span>1080 × 1080</span></figcaption></figure>
+      <figure class="size" style="margin:0"><img src="img/size-story.jpg" alt="Story version" width="405" height="720"><figcaption><b>Story / Reel</b><span>1080 × 1920</span></figcaption></figure>
+      <figure class="size" style="margin:0"><img src="img/size-pin.jpg" alt="Pinterest version" width="480" height="720"><figcaption><b>Pinterest</b><span>1000 × 1500</span></figcaption></figure>
+      <figure class="size" style="margin:0"><img src="img/size-x.jpg" alt="X post version" width="720" height="405"><figcaption><b>X post</b><span>1600 × 900</span></figcaption></figure>
+    </div></div>
+  </div></section>
+
+  <section id="templates"><div class="wrap menu">
+    <div class="board">
+      <span class="kicker">On the menu</span>
+      <h3>29 templates, four courses</h3>
+      <ul>
+        <li><div class="row"><span>Promo &amp; ads</span><span class="dots"></span><span>8</span></div><small>Headline, Stack, Split, Big Offer, Event, Ticket, Menu…</small></li>
+        <li><div class="row"><span>Value &amp; education</span><span class="dots"></span><span>9</span></div><small>Insight, List, Big Stat, This vs That, Carousel, Newspaper…</small></li>
+        <li><div class="row"><span>Social-native</span><span class="dots"></span><span>7</span></div><small>Text Post, iPhone Notes, Chat, Poll, Notification, Liquid Glass…</small></li>
+        <li><div class="row"><span>Photo</span><span class="dots"></span><span>5</span></div><small>Photo Story, Photo Card, Polaroid, Magazine Cover, Spotlight</small></li>
+        <li><div class="row"><span>Chef's specials</span><span class="dots"></span><span>∞</span></div><small>Ask Claude to design a brand-new template and it appears in your browser.</small></li>
+      </ul>
+    </div>
+    <div class="spread">
+      <figure><img src="img/t-list.jpg" alt="List template" loading="lazy" width="576" height="720"><figcaption><b>List</b> · tips people save</figcaption></figure>
+      <figure><img src="img/t-chat.jpg" alt="Chat template" loading="lazy" width="576" height="720"><figcaption><b>Chat</b> · an iMessage FAQ</figcaption></figure>
+      <figure><img src="img/t-glass.jpg" alt="Liquid glass template" loading="lazy" width="576" height="720"><figcaption><b>Liquid Glass</b> · frosted iOS card</figcaption></figure>
+      <figure><img src="img/t-ticket.jpg" alt="Ticket template" loading="lazy" width="576" height="720"><figcaption><b>Ticket</b> · launches and events</figcaption></figure>
+      <figure><img src="img/t-stat.jpg" alt="Big stat template" loading="lazy" width="576" height="720"><figcaption><b>Big Stat</b> · one number, sourced</figcaption></figure>
+      <figure><img src="img/t-textpost.jpg" alt="Text post template" loading="lazy" width="576" height="720"><figcaption><b>Text Post</b> · hot takes</figcaption></figure>
+    </div>
+  </div></section>
+
+  <section id="ai"><div class="wrap ai">
+    <div>
+      <span class="kicker">AI at the pass</span>
+      <h2 style="margin-top:12px">Claude or ChatGPT cooks with you, in your builder.</h2>
+      <ul class="points">
+        <li><span><b>You watch it work.</b> Ask for an ad and it appears in your editor: copy, versions, templates and colours, laid out side by side.</span></li>
+        <li><span><b>Nothing gets rendered behind your back.</b> Files are only made when you say export.</span></li>
+        <li><span><b>It writes in your voice.</b> One click for headlines, body copy, bulk lists and captions for every platform.</span></li>
+        <li><span><b>Use the account you already have.</b> Sign in with Claude or ChatGPT; no API key needed. Works as an MCP connector too.</span></li>
+      </ul>
+    </div>
+    <div class="feed" aria-label="Example of the AI activity feed">
+      <div class="feed-head"><span class="pill"><i></i>Claude · Building in your editor…</span></div>
+      <ol>
+        <li><span class="spin" aria-hidden="true"></span><span>Building in your editor<small>"Your 6am class starts in 20" · 3 versions · canvas view</small></span><time>now</time></li>
+        <li><span class="ok">✓</span><span>Writing captions<small>Instagram, LinkedIn, TikTok in your brand voice</small></span><time>12s</time></li>
+        <li><span class="ok">✓</span><span>Generating colours<small>3 contrast-checked palettes</small></span><time>40s</time></li>
+        <li><span class="ok">✓</span><span>Looking at your design<small>Pulse · Stack · Story 1080 × 1920</small></span><time>1m</time></li>
+      </ol>
+    </div>
+  </div></section>
+
+  <section id="planner"><div class="wrap">
+    <div class="split-head">
+      <div><span class="kicker">Planner</span><h2 style="margin-top:12px">Plan the week, then cook it.</h2></div>
+      <p class="lede">Set your rhythm, from once a week to twice a day. Your assistant drafts post ideas around your content pillars, and each one walks from idea to posted with the next step spelled out.</p>
+    </div>
+    <div class="planner" aria-label="Example week in the planner">
+      <div class="pl-top">
+        <div class="rhythm"><span class="chip">Once a week</span><span class="chip">3× a week</span><span class="chip on">Weekdays</span><span class="chip">Twice a day</span></div>
+        <span class="chip">Mon–Fri · 9:00 &amp; 18:00 · 10 a week</span>
+      </div>
+      <div class="week">
+        <span></span>
+        <div class="dow">Mon<b>12</b></div><div class="dow">Tue<b>13</b></div><div class="dow">Wed<b>14</b></div><div class="dow">Thu<b>15</b></div><div class="dow">Fri<b>16</b></div>
+        <span class="t">9:00</span>
+        <div class="cell"><div class="post posted"><span>Posted</span><b>Grind fresh, taste more</b><small>Instagram · LinkedIn</small></div></div>
+        <div class="cell"><div class="post ready"><span>Ready</span><b>Slow mornings, better coffee</b><small>Instagram</small></div></div>
+        <div class="cell"><div class="post draft"><span>Draft</span><b>How we roast on Fridays</b><small>Carousel · Instagram</small></div></div>
+        <div class="cell open">+ Plan a post</div>
+        <div class="cell"><div class="post idea"><span>Idea</span><b>Meet the barista behind the bar</b><small>Video · TikTok</small></div></div>
+        <span class="t">18:00</span>
+        <div class="cell open">+ Plan a post</div>
+        <div class="cell"><div class="post idea"><span>Idea</span><b>Oat or dairy? Settle it</b><small>Poll · Instagram</small></div></div>
+        <div class="cell open">+ Plan a post</div>
+        <div class="cell"><div class="post idea"><span>Idea</span><b>The Roast Sessions, Sat 7pm</b><small>Ticket · Instagram</small></div></div>
+        <div class="cell open">+ Plan a post</div>
+      </div>
+    </div>
+    <div class="trio">
+      <div><h3>Open in builder</h3><p>Turns a planned post into a design with the headline and caption already filled in.</p></div>
+      <div><h3>Post it</h3><p>Copies the caption and opens each platform's composer. Reminders tell you when a post is due.</p></div>
+      <div><h3>Your calendar</h3><p>Send the plan to Google, Apple or Outlook Calendar with an alert before every post.</p></div>
+    </div>
+  </div></section>
+
+  <section id="how"><div class="wrap">
+    <span class="kicker">How a post gets made</span>
+    <h2 style="margin-top:12px">Four stations, one pass.</h2>
+    <div class="steps">
+      <div class="step"><h3>Words</h3><p>Type a headline or let your assistant write it. Add versions to test, or paste a whole spreadsheet for bulk ads.</p></div>
+      <div class="step"><h3>Look</h3><p>Pick templates and colourways from your brand kit, add a photo or video, crop it, drop on a sticker.</p></div>
+      <div class="step"><h3>Motion</h3><p>Typewriter, word rise, holo shimmer, a shining button. Loops snap to lengths that repeat perfectly.</p></div>
+      <div class="step"><h3>Sizes</h3><p>Tick the platforms. Every size renders at once and lands in one folder with its captions.</p></div>
+    </div>
+  </div></section>
+
+  <section id="download"><div class="wrap serve">
+    <div>
+      <h2>Order up.</h2>
+      <p>Content Chef is free and open source. Download the desktop app; it keeps itself up to date.</p>
+    </div>
+    <div class="dl">
+      <a href="https://github.com/devyo1/ContentChef/releases/latest">Windows <small>.exe installer</small></a>
+      <a href="https://github.com/devyo1/ContentChef/releases/latest">macOS · Apple silicon <small>.dmg</small></a>
+      <a href="https://github.com/devyo1/ContentChef/releases/latest">Linux <small>.AppImage</small></a>
+    </div>
+  </div></section>
+
+  <footer class="wrap">
+    <span>Content Chef · made by <a href="https://realcitymedia.com">RealCityMedia</a></span>
+    <span><a href="https://github.com/devyo1/ContentChef">GitHub</a> · MIT licence</span>
+  </footer>
+</main>
+</body>
+</html>
