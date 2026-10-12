@@ -104,22 +104,27 @@ function sanitize(d, brand, meta) {
  *  - the server workspace (so Claude can see it), which also delivers Claude's edits back here.
  */
 function useDesign() {
-  const { brand, meta, pending, setPending, settings, workspace } = useApp();
+  const { brand, meta, pending, setPending, settings, workspace, rememberWorkspace } = useApp();
   const key = `design.${brand.id}`;
-  const fromWorkspace = workspace?.brand === brand.id && workspace.design;
+  const atKey = `designAt.${brand.id}`;
+  // Open whichever copy is newest: this browser's own (saved on every edit) or the shared
+  // workspace (which Claude may have changed since). Never let an older copy win.
+  const localAt = store.get(atKey, 0);
+  const fromWorkspace = workspace?.brand === brand.id && workspace.design && (workspace.updatedAt ?? 0) >= localAt;
   const [d, setD] = useState(() => sanitize(
     pending?.brand === brand.id ? { ...defaults(brand, meta, settings), ...pending.design }
       : fromWorkspace ? { ...defaults(brand, meta, settings), ...workspace.design }
         : store.get(key) ?? defaults(brand, meta, settings),
     brand, meta,
   ));
-  const [focus, setFocus] = useState(() => (fromWorkspace ? workspace.focus ?? {} : {}));
+  const [focus, setFocus] = useState(() => (fromWorkspace ? workspace.focus ?? {} : store.get(`focus.${brand.id}`, {})));
   const skipSync = useRef(false);
   const seen = useRef(workspace?.updatedAt);
 
   useEffect(() => { if (pending) setPending(null); }, []);
   useEffect(() => { setD((x) => sanitize(x, brand, meta)); }, [Object.keys(brand.palettes).join()]);
-  useEffect(() => { store.set(key, d); }, [d]);
+  useEffect(() => { store.set(key, d); store.set(atKey, Date.now()); }, [d]);
+  useEffect(() => { store.set(`focus.${brand.id}`, focus); }, [focus]);
 
   // Apply edits made elsewhere (Claude, another tab) when the workspace changes.
   useEffect(() => {
@@ -131,14 +136,22 @@ function useDesign() {
     setFocus(workspace.focus ?? {});
   }, [workspace?.updatedAt]);
 
-  // Publish our edits (debounced) so Claude always sees the current design.
+  // Publish our edits (debounced) so Claude always sees the current design, and keep the app's
+  // copy of the workspace current so reopening Create (or the colour generator) shows this design.
+  const unsent = useRef(null);
+  const publish = (snap) => {
+    unsent.current = null;
+    rememberWorkspace?.({ ...snap, source: CLIENT_ID, updatedAt: Date.now() });
+    return api('PUT', '/api/workspace', { ...snap, source: CLIENT_ID }).catch(() => {});
+  };
   useEffect(() => {
     if (skipSync.current) { skipSync.current = false; return undefined; }
-    const t = setTimeout(() => {
-      api('PUT', '/api/workspace', { brand: brand.id, design: d, focus, source: CLIENT_ID }).catch(() => {});
-    }, 500);
+    unsent.current = { brand: brand.id, design: d, focus };
+    const t = setTimeout(() => publish(unsent.current), 500);
     return () => clearTimeout(t);
   }, [d, focus]);
+  // Leaving Create (another tab, another brand) must not drop the last edit: send it right away.
+  useEffect(() => () => { if (unsent.current) publish(unsent.current); }, []);
 
   // Undo / redo. Rapid edits (typing, dragging a slider) are grouped into one step.
   const hist = useRef({ past: [], future: [], last: null, burstStart: null, timer: null, applying: false });

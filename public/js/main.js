@@ -154,7 +154,7 @@ function App() {
   }
   const brand = meta.brands.find((b) => b.id === brandId) ?? meta.brands[0];
   const collapsed = !!settings.sidebarCollapsed;
-  const ctx = { meta, brand, reload, setTab, pickBrand, pending, setPending, settings, saveSettings, refreshSettings, workspace, openNewBrand: () => setNewBrand(true) };
+  const ctx = { meta, brand, reload, setTab, pickBrand, pending, setPending, settings, saveSettings, refreshSettings, workspace, rememberWorkspace: setWorkspace, openNewBrand: () => setNewBrand(true) };
 
   const dark = document.documentElement.dataset.theme === 'dark';
   return html`
