@@ -15,7 +15,7 @@ const FORMAT = { single: 'Single image', carousel: 'Carousel', bulk: 'Ad set', v
 const PILLAR_COLOURS = ['#E5531A', '#2F80ED', '#27AE60', '#9B51E0', '#F2C94C', '#EB5757', '#00B8A9', '#F78FB3'];
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const today = () => ymd(new Date());
-const plain = (s) => String(s ?? '').replace(/[*_|]/g, ' ').replace(/\s+/g, ' ').trim();
+const plain = (s) => String(s ?? '').replace(/[*_]/g, '').replace(/\|/g, ' ').replace(/\s+/g, ' ').trim();
 const newId = () => (crypto.randomUUID?.() ?? String(Math.random()).slice(2));
 
 // ── Posting rhythm ──────────────────────────────────────────────────────────
@@ -58,6 +58,147 @@ function RhythmEditor({ s, setStrategy }) {
 const addDays = (date, n) => ymd(new Date(new Date(`${date}T12:00:00`).getTime() + n * 864e5));
 const mondayOf = (date) => addDays(date, 1 - dow(date));
 
+/** Slots in the rhythm over the next `days` days (from today, ignoring times already gone) and which have a post. */
+function coverage(s, posts, days = 14) {
+  const now = new Date();
+  const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const taken = new Set(posts.filter((p) => p.date).map((p) => `${p.date} ${p.time}`));
+  let total = 0; let open = 0;
+  for (let i = 0; i < days; i++) {
+    const d = addDays(today(), i);
+    if (!s.days.includes(dow(d))) continue;
+    for (const t of s.times) {
+      if (i === 0 && t <= nowTime) continue;
+      total++;
+      if (!taken.has(`${d} ${t}`)) open++;
+    }
+  }
+  return { total, open, filled: total - open };
+}
+
+/** Upcoming (next 4 weeks, not posted) posts per pillar, so the plan stays balanced. */
+function pillarMix(s, posts) {
+  const end = addDays(today(), 28);
+  const upcoming = posts.filter((p) => p.date && p.date >= today() && p.date <= end && p.status !== 'posted');
+  return s.pillars.map((name) => ({ name, n: upcoming.filter((p) => p.pillar === name).length }));
+}
+/** The pillar with the fewest upcoming posts: what the next post should be about. */
+const neediestPillar = (s, posts) => pillarMix(s, posts).sort((a, b) => a.n - b.n)[0]?.name ?? '';
+
+/** "Your plan": what the calendar is working towards, in a few readable lines. Editing opens PlanSetup. */
+function PlanCard({ s, posts, colour, platforms, onEdit, onFill, canFill, assistant }) {
+  const cov = coverage(s, posts);
+  const mix = pillarMix(s, posts);
+  const max = Math.max(1, ...mix.map((m) => m.n));
+  const pristine = !s.pillars.length && !s.goals && !s.audience;
+  if (pristine) {
+    return html`
+      <section class="card pl-card pl-setup-cta">
+        <h3>Set up your plan</h3>
+        <p class="muted small">One minute: how often you post, where, and the themes you rotate. The calendar then shows your open slots, keeps your topics balanced, and ${assistant} can fill the gaps in your voice.</p>
+        <button class="btn primary wide" onClick=${onEdit}>Set up my plan</button>
+      </section>`;
+  }
+  return html`
+    <section class="card pl-card">
+      <div class="row between"><h3>Your plan</h3><button class="link-btn" onClick=${onEdit}>Edit</button></div>
+      <div class="pl-sum">
+        <div class="pl-sum-row"><${Icon} name="calendar" size=${14} /><span>${rhythmLabel(s)}</span></div>
+        <div class="pl-sum-row"><${Icon} name="send" size=${14} /><span>${s.platforms.map((k) => platforms[k]?.label ?? k).join(', ') || 'No platforms yet'}</span></div>
+        ${s.goals && html`<div class="pl-sum-row"><${Icon} name="target" size=${14} /><span class="ellipsis" title=${s.goals}>${s.goals}</span></div>`}
+        ${s.audience && html`<div class="pl-sum-row"><${Icon} name="users" size=${14} /><span class="ellipsis" title=${s.audience}>${s.audience}</span></div>`}
+      </div>
+      <div class="pl-cov">
+        <div class="row between small"><b>Next 2 weeks</b><span class="muted">${cov.filled} of ${cov.total} slots planned</span></div>
+        <div class="pl-bar"><i style=${{ width: `${cov.total ? (cov.filled / cov.total) * 100 : 0}%` }}></i></div>
+        ${cov.open > 0 && html`<button class="btn small soft wide" disabled=${!canFill} title=${canFill ? '' : 'Connect an assistant in Settings first'} onClick=${onFill}><${Icon} name="sparkles" size=${13} /> Fill ${plural(cov.open, 'open slot')} with ${assistant}</button>`}
+      </div>
+      ${mix.length > 0 && html`
+        <div class="pl-mix">
+          <div class="row between small"><b>Topic balance</b><span class="muted">next 4 weeks</span></div>
+          ${mix.map((m) => html`<div class="pl-mix-row" key=${m.name}><span class="ellipsis"><i style=${{ background: colour(m.name) }}></i>${m.name}</span>
+            <span class="pl-mix-bar"><i style=${{ width: `${(m.n / max) * 100}%`, background: colour(m.name) }}></i></span><small class=${m.n === 0 ? 'warn' : 'muted'}>${m.n}</small></div>`)}
+          ${mix.some((m) => m.n === 0) && html`<p class="hint">New posts start on your quietest topic.</p>`}
+        </div>`}
+    </section>`;
+}
+
+/** Edit the plan: rhythm, platforms, topics, and (optional) who it's for and what it's for. */
+function PlanSetup({ s, platforms, assistant, onClose, onSave }) {
+  const [x, setX] = useState(s);
+  const [pillar, setPillar] = useState('');
+  const set = (patch) => setX((v) => ({ ...v, ...patch }));
+  const addPillar = () => { const p = pillar.trim(); if (p) set({ pillars: [...new Set([...x.pillars, p])] }); setPillar(''); };
+  return html`
+    <${Modal} title="Your content plan" onClose=${onClose}>
+      <div class="pl-setup">
+        <section><h4><span>1</span> How often do you post?</h4><${RhythmEditor} s=${x} setStrategy=${set} /></section>
+        <section><h4><span>2</span> Where?</h4>
+          <div class="pl-plats">${Object.entries(platforms).filter(([k]) => k !== 'display').map(([k, v]) => html`<button type="button" class=${x.platforms.includes(k) ? 'on' : ''} onClick=${() => set({ platforms: x.platforms.includes(k) ? x.platforms.filter((y) => y !== k) : [...x.platforms, k] })}>${v.label}</button>`)}</div>
+        </section>
+        <section><h4><span>3</span> What do you post about?</h4>
+          <p class="hint">3–5 recurring topics (content pillars), e.g. Tips, Behind the scenes, Client wins, Offers. The planner keeps them balanced.</p>
+          <div class="pl-pillars">${x.pillars.map((p) => html`<span class="pl-pillar" key=${p}>${p}<button title="Remove" onClick=${() => set({ pillars: x.pillars.filter((y) => y !== p) })}>×</button></span>`)}
+            <input class="pl-pillar-add" value=${pillar} placeholder="+ add a topic, press Enter" onInput=${(e) => setPillar(e.target.value)} onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); addPillar(); } }} onBlur=${addPillar} /></div>
+        </section>
+        <section><h4><span>4</span> Who's it for, and what's it for? <em>optional</em></h4>
+          <p class="hint">${assistant} uses this whenever it plans posts or writes captions for this brand.</p>
+          <${Field} label="Audience"><textarea rows="2" value=${x.audience} placeholder="e.g. local business owners 30–55 who know they need a better website" onInput=${(e) => set({ audience: e.target.value })}></textarea><//>
+          <${Field} label="Goal"><textarea rows="2" value=${x.goals} placeholder="e.g. 10 discovery calls a month" onInput=${(e) => set({ goals: e.target.value })}></textarea><//>
+        </section>
+      </div>
+      <div class="row end"><button class="btn ghost" onClick=${onClose}>Cancel</button><button class="btn primary" onClick=${() => onSave(x)}>Save plan</button></div>
+    <//>`;
+}
+
+/** The next few posts that need something from you, each with the one button that moves it forward. */
+function NextUp({ posts, onAct, onOpen, colour }) {
+  const now = `${today()} ${String(new Date().getHours()).padStart(2, '0')}:${String(new Date().getMinutes()).padStart(2, '0')}`;
+  const list = posts.filter((p) => p.date && p.status !== 'posted' && p.date >= addDays(today(), -14))
+    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).slice(0, 4);
+  if (!list.length) return null;
+  const ACTION = { idea: 'Create it', draft: 'Mark ready', ready: 'Post it' };
+  const when = (p) => {
+    const d = p.date === today() ? 'Today' : p.date === addDays(today(), 1) ? 'Tomorrow' : new Date(`${p.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    return `${d} · ${fmtTime(p.time)}`;
+  };
+  return html`
+    <div class="pl-next-up">
+      ${list.map((p) => {
+        const late = `${p.date} ${p.time}` < now;
+        return html`<div class="pl-nu st-${p.status} ${late ? 'late' : ''}" key=${p.id}>
+          <button type="button" class="pl-nu-body" onClick=${() => onOpen(p)}>
+            <small>${late ? 'Overdue · ' : ''}${when(p)}</small>
+            <b class="ellipsis">${plain(p.headline) || 'Untitled post'}</b>
+            <span class="muted small"><i style=${{ background: colour(p.pillar) }}></i>${STATUS[p.status].label} · ${FORMAT[p.format]}</span>
+          </button>
+          <button type="button" class="btn small ${p.status === 'ready' ? 'primary' : 'soft'}" onClick=${() => onAct(p)}>${ACTION[p.status]}</button>
+        </div>`;
+      })}
+    </div>`;
+}
+
+/** Google Calendar connection, shown in the Planner header. */
+function GoogleChip({ brand, setTab }) {
+  const [g, setG] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => api('GET', '/api/google/status').then(setG).catch(() => {});
+  useEffect(() => { load(); addEventListener('chef:google', load); addEventListener('focus', load); return () => { removeEventListener('chef:google', load); removeEventListener('focus', load); }; }, []);
+  if (!g) return null;
+  if (!g.connected) {
+    return html`<button class="btn" title="Show your plan in Google Calendar, kept in sync automatically" onClick=${async () => {
+      if (!g.configured) { setTab('settings'); toast('Set up Google Calendar in Settings first'); return; }
+      try { const { url } = await api('POST', '/api/google/connect'); window.open(url, '_blank'); toast('Finish signing in with Google in your browser'); } catch (e) { toast(e.message, 'err'); }
+    }}><${Icon} name="calendar" size=${15} /> Connect Google Calendar</button>`;
+  }
+  const st = g.sync?.[brand.id];
+  const ago = st?.at ? Math.round((Date.now() - st.at) / 60000) : null;
+  const label = busy ? 'Syncing…' : st?.error ? 'Sync problem' : ago === null ? 'Google Calendar' : ago < 1 ? 'Synced just now' : `Synced ${ago < 60 ? `${ago} min` : `${Math.round(ago / 60)} h`} ago`;
+  return html`<button class="btn pl-gcal ${st?.error ? 'err' : ''}" disabled=${busy} title=${st?.error ? `${st.error} (click to retry)` : 'Your plan is in the "Content Chef" calendar in Google Calendar. Click to sync now.'}
+    onClick=${async () => { setBusy(true); try { await api('POST', `/api/google/sync/${brand.id}`); toast('Google Calendar is up to date'); } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); load(); } }}>
+    <span class="dot"></span>${label}</button>`;
+}
+
 /** Month grid starting on Monday: 6 weeks × 7 days of YYYY-MM-DD. */
 function monthGrid(year, month) {
   const first = new Date(year, month, 1);
@@ -71,11 +212,13 @@ export function PlannerPage() {
   const [cursor, setCursor] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
   const [editing, setEditing] = useState(null); // post being edited (copy)
   const [planning, setPlanning] = useState(false);
-  const [newPillar, setNewPillar] = useState('');
+  const [setup, setSetup] = useState(false);
   const [view, setViewState] = useState(store.get('planner.view', 'week'));
   const setView = (v) => { setViewState(v); store.set('planner.view', v); };
   const [weekStart, setWeekStart] = useState(() => mondayOf(today()));
-  const lastSaved = useRef(0);
+  // updatedAt of our own last save, to skip the server echoing it back. null (not 0) so a brand
+  // that has never been planned (updatedAt 0) still loads.
+  const lastSaved = useRef(null);
   const saveTimer = useRef(null);
 
   const load = () => api('GET', `/api/planner?brand=${encodeURIComponent(brand.id)}`).then((p) => { if (p.updatedAt !== lastSaved.current) setPlan(p); }).catch((e) => toast(e.message, 'err'));
@@ -101,7 +244,7 @@ export function PlannerPage() {
   const upsert = (post) => commit({ ...plan, posts: plan.posts.some((p) => p.id === post.id) ? plan.posts.map((p) => (p.id === post.id ? post : p)) : [...plan.posts, post] });
   const remove = (id) => commit({ ...plan, posts: plan.posts.filter((p) => p.id !== id) });
   const colour = (pillar) => PILLAR_COLOURS[Math.max(0, s.pillars.indexOf(pillar)) % PILLAR_COLOURS.length];
-  const blank = (date, time) => ({ id: newId(), date, time: time ?? s.times[0] ?? '10:00', platforms: [...s.platforms], pillar: s.pillars[0] ?? '', format: 'single', status: 'idea', headline: '', brief: '', caption: '', notes: '' });
+  const blank = (date, time) => ({ id: newId(), date, time: time ?? s.times[0] ?? '10:00', platforms: [...s.platforms], pillar: neediestPillar(s, plan.posts), format: 'single', status: 'idea', headline: '', brief: '', caption: '', notes: '' });
 
   // Hand-holding: open the post in the builder with its words and caption already filled in.
   const openInBuilder = (post) => {
@@ -124,9 +267,13 @@ export function PlannerPage() {
   const monthName = new Date(cursor.y, cursor.m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   const byDate = (d) => plan.posts.filter((p) => p.date === d).sort((a, b) => a.time.localeCompare(b.time));
   const unscheduled = plan.posts.filter((p) => !p.date);
-  const weekEnd = ymd(new Date(Date.now() + 6 * 864e5));
-  const upcoming = plan.posts.filter((p) => p.date && p.date >= today() && p.date <= weekEnd && p.status !== 'posted').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   const counts = Object.fromEntries(Object.keys(STATUS).map((k) => [k, plan.posts.filter((p) => p.status === k).length]));
+  // The one button on each "Next up" post: idea → builder, draft → ready, ready → the posting kit.
+  const act = (p) => {
+    if (p.status === 'idea') openInBuilder(p);
+    else if (p.status === 'draft') { upsert({ ...p, status: 'ready' }); toast('Marked ready: it will be waiting for you on the day'); }
+    else setEditing({ ...p });
+  };
   const move = (id, date, time) => { const p = plan.posts.find((x) => x.id === id); if (p) upsert({ ...p, date, ...(time ? { time } : {}) }); };
   // Open slots: days/times in your rhythm (from today on) that have no post yet.
   const openSlots = (d) => (d >= today() && s.days.includes(dow(d)) ? s.times.filter((t) => !byDate(d).some((p) => p.time === t)) : []);
@@ -154,43 +301,21 @@ export function PlannerPage() {
   return html`
     <div class="page"><div class="page-inner planner">
       <div class="dash-head">
-        <div><h2>Planner</h2><p class="muted">${brand.name} · ${plural(plan.posts.length, 'post')} planned · ${counts.posted} posted</p></div>
+        <div><h2>Planner</h2><p class="muted">${brand.name} · ${counts.idea + counts.draft + counts.ready} to make · ${counts.posted} posted</p></div>
         <div class="row">
-          <a class="btn" href=${`/api/planner/${brand.id}/calendar.ics`} download title="Add the plan to Google, Apple or Outlook Calendar, with a reminder 30 minutes before each post"><${Icon} name="calendar" size=${15} /> Add to my calendar</a>
+          <${GoogleChip} brand=${brand} setTab=${setTab} />
+          <a class="btn ghost" href=${`/api/planner/${brand.id}/calendar.ics`} download title="Download the plan as a calendar file (Apple, Outlook or any calendar app), with a reminder 30 minutes before each post">.ics</a>
           <button class="btn" onClick=${() => setEditing(blank(today()))}><${Icon} name="plus" size=${15} /> Add post</button>
           <button class="btn primary" disabled=${!assistantReady(settings)} onClick=${() => setPlanning(true)} title=${assistantReady(settings) ? '' : 'Connect an assistant in Settings first'}><${Icon} name="sparkles" size=${15} /> Plan with ${assistantName(settings)}</button>
         </div>
       </div>
 
-      <div class="pl-steps">
-        ${Object.entries(STATUS).map(([k, v]) => html`<div class="pl-step st-${k}"><b>${counts[k]}</b><span>${v.label}</span><small>${v.hint}</small></div>`)}
-      </div>
+      <${NextUp} posts=${plan.posts} colour=${colour} onOpen=${(p) => setEditing({ ...p })} onAct=${act} />
 
       <div class="pl-layout">
         <aside class="pl-side">
-          <section class="card pl-card">
-            <h3>Strategy</h3>
-            <${Field} label="Goals" hint="what success looks like"><textarea rows="2" value=${s.goals} placeholder="e.g. 20 new bookings a month, grow Instagram to 5k" onChange=${(e) => setStrategy({ goals: e.target.value })}></textarea><//>
-            <${Field} label="Audience"><textarea rows="2" value=${s.audience} placeholder="e.g. busy locals 25–40 who care about good coffee" onChange=${(e) => setStrategy({ audience: e.target.value })}></textarea><//>
-            <div class="field"><span class="field-label">Content pillars<em>the themes you rotate</em></span>
-              <div class="pl-pillars">${s.pillars.map((p) => html`<span class="pl-pillar" key=${p}><i style=${{ background: colour(p) }}></i>${p}<button title="Remove" onClick=${() => setStrategy({ pillars: s.pillars.filter((x) => x !== p) })}>×</button></span>`)}
-                <input class="pl-pillar-add" value=${newPillar} placeholder="+ add pillar" onInput=${(e) => setNewPillar(e.target.value)}
-                  onKeyDown=${(e) => { if (e.key === 'Enter' && newPillar.trim()) { setStrategy({ pillars: [...new Set([...s.pillars, newPillar.trim()])] }); setNewPillar(''); } }} /></div>
-            </div>
-            <${RhythmEditor} s=${s} setStrategy=${setStrategy} />
-            <div class="field"><span class="field-label">Platforms</span>
-              <div class="pl-plats">${Object.entries(meta.platforms).filter(([k]) => k !== 'display').map(([k, v]) => html`<button type="button" class=${s.platforms.includes(k) ? 'on' : ''} onClick=${() => setStrategy({ platforms: s.platforms.includes(k) ? s.platforms.filter((x) => x !== k) : [...s.platforms, k] })}>${v.label}</button>`)}</div>
-            </div>
-          </section>
-
-          <section class="card pl-card">
-            <h3>This week</h3>
-            ${upcoming.length ? upcoming.map((p) => html`
-              <button type="button" class="pl-up" key=${p.id} onClick=${() => setEditing({ ...p })}>
-                <span class="pl-up-date">${new Date(`${p.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' })}<small>${p.time}</small></span>
-                <span class="grow ellipsis"><b>${plain(p.headline) || 'Untitled post'}</b><small class="muted">${STATUS[p.status].label} → ${STATUS[p.status].hint}</small></span>
-              </button>`) : html`<p class="muted small">Nothing due in the next 7 days.${plan.posts.length ? '' : ` Press "Plan with ${assistantName(settings)}" to draft a plan.`}</p>`}
-          </section>
+          <${PlanCard} s=${s} posts=${plan.posts} colour=${colour} platforms=${meta.platforms} assistant=${assistantName(settings)}
+            canFill=${assistantReady(settings)} onEdit=${() => setSetup(true)} onFill=${() => setPlanning(true)} />
 
           ${unscheduled.length > 0 && html`
             <section class="card pl-card" onDragOver=${(e) => e.preventDefault()} onDrop=${(e) => move(e.dataTransfer.getData('text/plain'), null)}>
@@ -249,6 +374,8 @@ export function PlannerPage() {
         onSave=${(p) => { upsert(p); setEditing(null); }}
         onDelete=${(id) => { remove(id); setEditing(null); }}
         onOpen=${(p) => { upsert(p); setEditing(null); openInBuilder(p); }} />`}
+      ${setup && html`<${PlanSetup} s=${s} platforms=${meta.platforms} assistant=${assistantName(settings)} onClose=${() => setSetup(false)}
+        onSave=${(next) => { setStrategy(next); setSetup(false); toast('Plan saved'); }} />`}
       ${planning && html`<${PlanModal} brand=${brand} strategy=${s} settings=${settings} onClose=${() => setPlanning(false)}
         onKeep=${(posts, pillars) => { commit({ ...plan, strategy: pillars?.length && !s.pillars.length ? { ...s, pillars } : s, posts: [...plan.posts, ...posts] }); setPlanning(false); toast(`Added ${plural(posts.length, 'post')} to your calendar`); }} />`}
     </div></div>`;
@@ -281,7 +408,7 @@ function PostEditor({ post, strategy, colour, platforms, brand, onClose, onSave,
     setBusy(true);
     try {
       const plats = p.platforms.length ? p.platforms : ['instagram'];
-      const r = await api('POST', '/api/captions/ai', { brand: brand.id, content: { headline: p.headline, subhead: p.brief }, platforms: [plats[0]], prompt: p.brief });
+      const r = await api('POST', '/api/captions/ai', { brand: brand.id, content: { headline: p.headline, subhead: p.brief }, platforms: [plats[0]], prompt: [p.brief, strategy.audience && `Audience: ${strategy.audience}`, strategy.goals && `Goal: ${strategy.goals}`].filter(Boolean).join('\n') });
       const c = r[plats[0]];
       set({ caption: typeof c === 'object' && c ? `${c.title}\n\n${c.description}` : c ?? p.caption });
     } catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
@@ -351,12 +478,12 @@ function PlanModal({ brand, strategy, settings, onClose, onKeep }) {
   return html`
     <${Modal} title=${`Plan with ${assistantName(settings)}`} wide onClose=${onClose}>
       ${!result ? html`
-        <p class="muted">${assistantName(settings)} drafts post ideas for the next few weeks from your strategy${strategy.pillars.length ? '' : ' (and suggests content pillars, since you have none yet)'}. Nothing is added until you choose what to keep.</p>
+        <p class="muted">${assistantName(settings)} writes posts for the open slots in your rhythm, balancing your topics${strategy.pillars.length ? '' : ' (and suggests some, since you have none yet)'}. Posts you already planned stay as they are, and nothing is added until you choose what to keep.</p>
         <div class="two">
           <${Field} label="How many weeks"><${Segmented} value=${weeks} onChange=${setWeeks} options=${[1, 2, 3, 4].map((w) => ({ value: w, label: `${w}` }))} /><//>
           <${Field} label="Starting"><input type="date" value=${start} onInput=${(e) => setStart(e.target.value)} /><//>
         </div>
-        <p class="hint">${rhythmLabel(strategy)} on ${strategy.platforms.join(', ') || 'Instagram'} → ${Math.min(60, perWeek(strategy) * weeks)} post ideas. Change the rhythm and platforms in Strategy.</p>
+        <p class="hint">${rhythmLabel(strategy)} on ${strategy.platforms.join(', ') || 'Instagram'}: up to ${Math.min(60, perWeek(strategy) * weeks)} open slots. Change the rhythm in Your plan → Edit.</p>
         <${Field} label="Anything specific?" hint="optional"><textarea rows="3" value=${prompt} placeholder="e.g. launching our new website packages in November, a Black Friday offer, hiring a designer" onInput=${(e) => setPrompt(e.target.value)}></textarea><//>
         <div class="row end"><button class="btn primary" disabled=${busy} onClick=${run}>${busy ? html`<span class="spin"></span> Planning…` : html`<${Icon} name="sparkles" size=${15} /> Draft my plan`}</button></div>`
       : html`

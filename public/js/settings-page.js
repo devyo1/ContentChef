@@ -1,5 +1,5 @@
 // Settings: appearance, assistant connections, export defaults and MCP clients.
-import { html, useState, api, useApp, Field, Segmented, toast } from './lib.js';
+import { html, useState, useEffect, api, useApp, Field, Segmented, toast } from './lib.js';
 import { assistantProvider } from './assistant.js';
 import { ImageSettings } from './image-generation.js';
 
@@ -138,6 +138,7 @@ export function SettingsPage() {
         </section>
 
         <${ImageSettings} />
+        <${GoogleCalendarSettings} />
         <section class="card">
           <h3>Use Content Chef from other AI apps</h3>
           <p>Content Chef is also an MCP connector. Codex, Claude Desktop, Claude Code or another MCP client can use the same tools. Changes show up here live.</p>
@@ -165,4 +166,51 @@ export function SettingsPage() {
         <p class="made-by">Content Chef · made by <a href="https://realcitymedia.com" target="_blank" rel="noopener">RealCityMedia</a></p>
       </div>
     </div></div>`;
+}
+
+/** Google Calendar: the Planner keeps a "Content Chef" calendar in Google in sync with your plan. */
+function GoogleCalendarSettings() {
+  const [g, setG] = useState(null);
+  const [id, setId] = useState('');
+  const [secret, setSecret] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [own, setOwn] = useState(false);
+  const load = () => api('GET', '/api/google/status').then(setG).catch(() => {});
+  useEffect(() => { load(); addEventListener('chef:google', load); addEventListener('focus', load); return () => { removeEventListener('chef:google', load); removeEventListener('focus', load); }; }, []);
+  const connect = async () => {
+    setBusy(true);
+    try { const { url } = await api('POST', '/api/google/connect'); window.open(url, '_blank'); toast('Finish signing in with Google in your browser'); }
+    catch (e) { toast(e.message, 'err'); } finally { setBusy(false); }
+  };
+  const saveClient = async () => {
+    try { setG(await api('PUT', '/api/google/client', { id, secret })); setId(''); setSecret(''); setOwn(false); toast(id.trim() ? 'Google app saved' : 'Google app removed'); }
+    catch (e) { toast(e.message, 'err'); }
+  };
+  if (!g) return null;
+  const synced = Object.values(g.sync ?? {}).reduce((n, x) => n + (x.events ?? 0), 0);
+  return html`
+    <section class="card">
+      <h3>Google Calendar</h3>
+      <p>Your Planner posts appear in a "Content Chef" calendar in Google Calendar (and on your phone), with a reminder 30 minutes before each post. It updates by itself whenever the plan changes. Content Chef can only see and change that one calendar.</p>
+      ${g.connected ? html`
+        <div class="row between"><span><span class="status-dot ok"></span> Connected${synced ? ` · ${synced} posts in your calendar` : ''}</span>
+          <button class="btn ghost" onClick=${async () => { setG(await api('POST', '/api/google/disconnect')); toast('Google Calendar disconnected'); }}>Disconnect</button></div>`
+      : g.configured ? html`<div class="row"><button class="btn primary" disabled=${busy} onClick=${connect}>${busy ? 'Opening…' : 'Connect Google Calendar'}</button></div>`
+      : html`<p class="small muted">To connect, Content Chef needs a Google sign-in app (a free OAuth client ID from Google Cloud). Add yours below.</p>`}
+      ${(!g.configured || own) ? html`
+        <details open=${!g.configured} class="gcal-setup">
+          <summary>Set up a Google sign-in app (5 minutes, once)</summary>
+          <ol class="small">
+            <li>Open <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener">Google Cloud → Google Calendar API</a>, pick or create a project and press <b>Enable</b>.</li>
+            <li>Go to <a href="https://console.cloud.google.com/auth/overview" target="_blank" rel="noopener">Google Auth Platform</a>, set it up as <b>External</b>, and add your Google account under <b>Audience → Test users</b>.</li>
+            <li>Under <a href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noopener">Clients</a>, create a client of type <b>Desktop app</b> and copy its Client ID and Client secret here.</li>
+          </ol>
+          <div class="two">
+            <${Field} label="Client ID"><input value=${id} placeholder="….apps.googleusercontent.com" onInput=${(e) => setId(e.target.value)} /><//>
+            <${Field} label="Client secret"><input type="password" value=${secret} placeholder="GOCSPX-…" onInput=${(e) => setSecret(e.target.value)} /><//>
+          </div>
+          <div class="row end"><button class="btn" disabled=${!id.trim()} onClick=${saveClient}>Save</button></div>
+        </details>`
+      : g.ownClient && html`<p class="small muted">Using your own Google sign-in app. <button class="link-btn" onClick=${() => setOwn(true)}>Change</button></p>`}
+    </section>`;
 }

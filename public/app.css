@@ -774,7 +774,7 @@ textarea.paste{font-family:var(--mono);font-size:12.5px;margin:10px 0}
 .topbar.nav-compact .tabs button{padding:6px 10px}
 .topbar.nav-compact .logo .word{display:none}
 .logo .word{display:flex;flex-direction:column;line-height:1.05}
-.logo .by-rcm{font:600 9px/1.4 var(--mono);letter-spacing:.14em;color:var(--text-3);text-decoration:none;opacity:.75;align-self:flex-start;transition:color .15s,opacity .15s}
+.logo .by-rcm{font:500 10.5px/1.4 var(--sans,inherit);letter-spacing:.01em;margin-top:1px;color:var(--text-3);text-decoration:none;opacity:.75;align-self:flex-start;transition:color .15s,opacity .15s}
 .logo .by-rcm:hover{opacity:1;color:var(--accent-ink)}
 .logo-btn{border:0;padding:2px;margin:-2px;background:none;border-radius:10px;cursor:pointer;display:grid;transition:background .15s,transform .15s}
 .logo-btn:hover{background:var(--hover);transform:scale(1.04)}
@@ -886,3 +886,37 @@ textarea.paste{font-family:var(--mono);font-size:12.5px;margin:10px 0}
 .pl-prop .grow{display:flex;flex-direction:column;gap:2px;min-width:0}
 @media (max-width:1100px){.pl-layout{grid-template-columns:1fr}.pl-steps{grid-template-columns:repeat(2,1fr)}}
 .pl-side .card,.pl-cal.card{margin-bottom:0}
+/* Planner: next up, your plan, setup, Google Calendar */
+.pl-next-up{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin:14px 0}
+.pl-nu{display:flex;align-items:center;gap:10px;padding:10px 12px 10px 14px;border-radius:var(--r);background:var(--surface);border:1px solid var(--line);position:relative;overflow:hidden;min-width:0}
+.pl-nu::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--st,var(--line))}
+.pl-nu.late{border-color:var(--err);background:linear-gradient(var(--err-soft),var(--err-soft)),var(--surface)}
+.pl-nu.late small{color:var(--err)}
+.pl-nu-body{flex:1;min-width:0;display:grid;gap:2px;text-align:left;border:0;background:none;padding:0;color:var(--text);cursor:pointer}
+.pl-nu-body small{font-size:11.5px;color:var(--text-2);font-weight:600}
+.pl-nu-body span i,.pl-sum i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:1px}
+.pl-nu .btn{flex:none}
+.pl-sum{display:grid;gap:7px;margin-bottom:12px}
+.pl-sum-row{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--text-2);min-width:0}
+.pl-sum-row .ic{flex:none;margin-top:2px;color:var(--text-3)}
+.pl-cov,.pl-mix{display:grid;gap:7px;padding-top:12px;margin-top:4px;border-top:1px solid var(--line)}
+.pl-mix{margin-top:12px}
+.pl-bar{height:6px;border-radius:99px;background:var(--surface-3);overflow:hidden}
+.pl-bar i{display:block;height:100%;border-radius:inherit;background:var(--accent);transition:width .3s}
+.pl-mix-row{display:grid;grid-template-columns:minmax(0,1fr) 70px 18px;gap:8px;align-items:center;font-size:12.5px}
+.pl-mix-row i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px}
+.pl-mix-bar{height:5px;border-radius:99px;background:var(--surface-3);overflow:hidden}
+.pl-mix-bar i{display:block;height:100%;margin:0;border-radius:inherit}
+.pl-mix-row small{text-align:right;font-variant-numeric:tabular-nums}
+.pl-mix-row small.warn{color:var(--warn-ink);font-weight:700}
+.pl-setup-cta{background:linear-gradient(135deg,var(--accent-soft),transparent 70%),var(--surface)}
+.pl-setup-cta p{margin:0 0 12px}
+.pl-setup{display:grid;gap:18px;margin-bottom:16px}
+.pl-setup h4{display:flex;align-items:center;gap:8px;margin:0 0 8px;font-size:14px}
+.pl-setup h4 span{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;background:var(--accent-soft);color:var(--accent-ink)}
+.pl-setup h4 em{font-style:normal;font-weight:400;color:var(--text-3);font-size:12px}
+.pl-gcal .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px var(--ok-soft)}
+.pl-gcal.err .dot{background:var(--err);box-shadow:0 0 0 3px var(--err-soft)}
+.gcal-setup{margin-top:10px}
+.gcal-setup summary{cursor:pointer;font-weight:600;font-size:13px}
+.gcal-setup ol{padding-left:18px;display:grid;gap:4px;margin:10px 0}

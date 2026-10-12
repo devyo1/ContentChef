@@ -136,6 +136,7 @@ function App() {
       if (e.type === 'meta') reload();
       if (e.type === 'activity') dispatchEvent(new Event('chef:activity'));
       if (e.type === 'planner') dispatchEvent(new CustomEvent('chef:planner', { detail: e.brand }));
+      if (e.type === 'google') dispatchEvent(new Event('chef:google'));
       if (e.type === 'workspace' && e.source !== CLIENT_ID) {
         const ws = await api('GET', '/api/workspace');
         setWorkspace(ws);
@@ -175,7 +176,7 @@ function App() {
             ${window.desktop?.showLauncher
               ? html`<button class="logo-btn" title="Back to the launcher" onClick=${() => window.desktop.showLauncher()}><img class="mark-img" src="logo.svg" alt="Launcher" width="34" height="34" /></button>`
               : html`<img class="mark-img" src="logo.svg" alt="" width="34" height="34" />`}
-            <span class="word">Content Chef<a class="by-rcm" href="https://realcitymedia.com" target="_blank" rel="noopener" title="Made by RealCityMedia">by RCM</a></span>
+            <span class="word">Content Chef<a class="by-rcm" href="https://realcitymedia.com" target="_blank" rel="noopener" title="Made by RealCityMedia">A RealCityMedia tool</a></span>
           </div>
           <${BrandSwitch} meta=${meta} brand=${brand} onPick=${pickBrand} onNew=${() => setNewBrand(true)} />
           <nav class="tabs" aria-label="Main navigation">

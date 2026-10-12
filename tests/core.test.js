@@ -159,6 +159,9 @@ test('planner: any posting rhythm, from once a week to several times a day', () 
   const twiceDaily = planSlots({ start: '2026-10-12', weeks: 1, days: [1, 2, 3, 4, 5, 6, 7], times: ['09:00', '18:00'] });
   assert.equal(twiceDaily.length, 14);
   assert.deepEqual(twiceDaily.slice(0, 2), [{ date: '2026-10-12', time: '09:00' }, { date: '2026-10-12', time: '18:00' }]);
+  // Planning fills only open slots: posts already on the calendar keep theirs.
+  const open = planSlots({ start: '2026-10-12', weeks: 1, days: [1, 3], times: ['09:00'], taken: [{ date: '2026-10-12', time: '09:00' }] });
+  assert.deepEqual(open, [{ date: '2026-10-14', time: '09:00' }]);
   const s = Strategy.parse({ days: [5, 1, 1], times: ['18:00', '09:00'] });
   assert.deepEqual([s.days, s.times], [[1, 5], ['09:00', '18:00']]);
 });

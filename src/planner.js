@@ -76,14 +76,15 @@ export async function upsertPosts(brand, { posts = [], remove = [], strategy } =
 }
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-/** Posting slots ({date, time}) for `weeks` weeks from `start` (default tomorrow) on the chosen days and times. */
-export function planSlots({ start, weeks = 2, days = [1, 3, 5], times = ['10:00'] }) {
+/** Open posting slots ({date, time}, skipping ones already `taken` by a post) for `weeks` weeks from `start` (default tomorrow) on the chosen days and times. */
+export function planSlots({ start, weeks = 2, days = [1, 3, 5], times = ['10:00'], taken = [] }) {
+  const busy = new Set(taken.map((p) => `${p.date} ${p.time}`));
   const begin = start && DATE.test(start) ? new Date(`${start}T12:00:00`) : new Date(Date.now() + 864e5);
   const out = [];
   for (let i = 0; i < weeks * 7; i++) {
     const d = new Date(begin.getTime() + i * 864e5);
     const dow = d.getDay() === 0 ? 7 : d.getDay();
-    if (days.includes(dow)) for (const time of times) out.push({ date: ymd(d), time });
+    if (days.includes(dow)) for (const time of times) if (!busy.has(`${ymd(d)} ${time}`)) out.push({ date: ymd(d), time });
   }
   return out;
 }
@@ -104,7 +105,11 @@ export async function planContent(brandId, input, { generate = writeWithProvider
   const brand = await loadBrand(brandId);
   const cur = await getPlanner(brandId);
   const strategy = { ...cur.strategy, ...(a.strategy ?? {}) };
-  const dates = planSlots({ start: a.start, weeks: a.weeks, days: strategy.days, times: strategy.times }).slice(0, 60);
+  // Only the open slots in the rhythm: posts you already planned stay as they are.
+  const dates = planSlots({ start: a.start, weeks: a.weeks, days: strategy.days, times: strategy.times, taken: cur.posts.filter((p) => p.date) }).slice(0, 60);
+  if (!dates.length) throw new Error('Every slot in those weeks already has a post. Pick more weeks or add posting days.');
+  const today = ymd(new Date());
+  const mix = strategy.pillars.map((p) => `${p}: ${cur.posts.filter((x) => x.pillar === p && x.date >= today).length}`);
   const platforms = strategy.platforms.length ? strategy.platforms : ['instagram'];
   const taken = cur.posts.filter((p) => p.date).map((p) => `${p.date}: ${p.headline}`).slice(-30);
   const text = [
@@ -115,6 +120,7 @@ export async function planContent(brandId, input, { generate = writeWithProvider
     strategy.pillars.length ? `Content pillars: ${strategy.pillars.join(' · ')}` : 'No content pillars yet: propose 3–5 and use them.',
     `Platforms: ${platforms.map((p) => PLATFORMS[p]?.label ?? p).join(', ')}`,
     taken.length && `Already planned (don't repeat these): ${taken.join(' | ')}`,
+    mix.length && `Upcoming posts per pillar (favour the pillars with fewer): ${mix.join(', ')}`,
     a.prompt && `Brief from the user: ${a.prompt}`,
     '',
     `Write a content plan of exactly ${dates.length} posts, in posting order, that a small team can actually make. Mix value posts (tips, insights, lists, behind the scenes) with a few promotional ones, rotate the pillars, and build a little narrative across the weeks. For each post: pillar, format ("single" for one image, "carousel" for a multi-slide story, "video" for a short clip), headline (2–7 words, the on-image hook; *stars* around one key word), brief (one or two sentences: what the post says and why it matters to the audience), caption (ready to post, in the brand voice, no hashtags spam: at most 3).`,

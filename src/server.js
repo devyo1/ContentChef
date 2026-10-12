@@ -24,6 +24,7 @@ import { createBrand } from './core/brands.js';
 import { imageStatus, prepareBackground, generateBackground } from './background-images.js';
 import { connectHiggsfield, finishHiggsfield, disconnectHiggsfield, higgsfieldModels } from './higgsfield.js';
 import { getPlanner, savePlanner, planContent, plannerIcs, PLANNER_DIR } from './planner.js';
+import { googleStatus, saveGoogleClient, connectGoogle, finishGoogle, disconnectGoogle, syncBrand, scheduleGoogleSync } from './google-calendar.js';
 import { listCarousels, loadCarousel, createCarousel, saveCarouselSlide, refineCarouselSlide, exportCarousel, saveCarouselDesign, generateCarouselDesign } from './carousels.js';
 
 const PORT = Number(process.env.PORT ?? 4545);
@@ -161,6 +162,21 @@ app.get('/api/higgsfield/callback', async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try { await finishHiggsfield(req.query); res.redirect(303, '/?higgsfield=connected'); }
   catch (e) { res.status(400).type('text').send(e.message); }
+});
+// ── Google Calendar (Planner sync) ──
+const plannerLoader = (brand) => async () => ({ planner: await getPlanner(brand), name: (await loadBrand(brand)).name });
+app.get('/api/google/status', api(() => googleStatus()));
+app.put('/api/google/client', api((req) => saveGoogleClient(req.body)));
+app.post('/api/google/connect', api((req) => connectGoogle(req.socket.localPort)));
+app.post('/api/google/disconnect', api(() => disconnectGoogle()));
+app.post('/api/google/sync/:brand', api((req) => syncBrand(req.params.brand, plannerLoader(req.params.brand), { force: true })));
+app.get('/api/google/callback', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    await finishGoogle(req.query);
+    broadcast({ type: 'google' });
+    res.type('html').send('<!doctype html><meta charset="utf-8"><title>Connected</title><body style="font:16px system-ui;display:grid;place-items:center;height:90vh"><div><h2>Google Calendar connected</h2><p>You can close this tab and go back to Content Chef.</p></div>');
+  } catch (e) { res.status(400).type('text').send(e.message); }
 });
 for (const [route, run] of [['prepare', (b, options) => prepareBackground(b, options)], ['generate', (b, options) => generateBackground(b.id, { ...options, acceptedCost: b.acceptedCost === true })]]) {
   app.post(`/api/background/${route}`, api(async (req, res) => {
@@ -374,7 +390,11 @@ watchDir(DATA_DIR, {}, async (file) => {
 });
 watchDir(BRANDS_DIR, { recursive: true }, (file) => { if (!file.includes('.cache')) broadcast({ type: 'meta' }); });
 watchDir(CATALOG_DIR, {}, () => broadcast({ type: 'catalogs' }));
-watchDir(PLANNER_DIR, {}, (f) => broadcast({ type: 'planner', brand: f.replace(/.json.*$/, '') }));
+watchDir(PLANNER_DIR, {}, (f) => {
+  const brand = f.replace(/.json.*$/, '');
+  broadcast({ type: 'planner', brand });
+  if (f.endsWith('.json')) scheduleGoogleSync(brand, plannerLoader(brand), () => broadcast({ type: 'google' }));
+});
 watchDir(TEMPLATES_DIR, {}, () => broadcast({ type: 'meta' })); // custom templates added / edited
 
 // ── Shared workspace (what's open in the editor) ────────────────────────────
