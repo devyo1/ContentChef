@@ -1,5 +1,5 @@
 // Launcher and studio share a release, runtime, and local workspace.
-import { app, BrowserWindow, shell, ipcMain, nativeTheme, Menu, dialog } from 'electron';
+import { app, BrowserWindow, shell, ipcMain, nativeTheme, Menu, dialog, nativeImage, clipboard } from 'electron';
 import electronUpdater from 'electron-updater';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,10 +63,32 @@ ipcMain.on('theme', (event, dark) => {
   if (process.platform !== 'darwin') studio.setTitleBarOverlay(overlay(!!dark));
 });
 ipcMain.on('launcher:show', (event) => { if (fromWindow(event, studio, '/')) focus(launcher); });
+// Only files Content Chef rendered (inside the output folder) can be dragged out or copied.
+let outputDir = null;
+function outputFile(rel) {
+  if (!outputDir || typeof rel !== 'string') return null;
+  const file = path.resolve(outputDir, rel);
+  return file.startsWith(outputDir + path.sep) ? file : null;
+}
+ipcMain.on('file:drag', (event, rel) => {
+  const file = fromWindow(event, studio, '/') && outputFile(rel);
+  if (!file) return;
+  const icon = nativeImage.createFromPath(file);
+  // Videos have no thumbnail here: use the app icon so the drag still shows something.
+  event.sender.startDrag({ file, icon: (icon.isEmpty() ? nativeImage.createFromPath(path.join(here, '../build/icon.png')) : icon).resize({ width: 96 }) });
+});
+ipcMain.handle('file:copy-image', (event, rel) => {
+  const file = fromWindow(event, studio, '/') && outputFile(rel);
+  const img = file && nativeImage.createFromPath(file);
+  if (!img || img.isEmpty()) return false;
+  clipboard.writeImage(img);
+  return true;
+});
 async function start() {
   await app.whenReady();
   const { startServer } = await import('../src/server.js');
-  const { HOME } = await import('../src/core/paths.js');
+  const { HOME, OUTPUT_DIR } = await import('../src/core/paths.js');
+  outputDir = path.resolve(OUTPUT_DIR);
   const started = await startServer({ port: 0 });
   server = started.server;
   origin = `http://127.0.0.1:${started.port}`;

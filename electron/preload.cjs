@@ -6,4 +6,8 @@ contextBridge.exposeInMainWorld('desktop', {
   platform: process.platform,
   setDark: (dark) => ipcRenderer.send('theme', !!dark),
   showLauncher: () => ipcRenderer.send('launcher:show'),
+  // Posting kit: drag a finished post's image out into a browser composer, or copy it to the clipboard.
+  // `file` is a path inside the output folder (as the Planner stores it).
+  dragFile: (file) => ipcRenderer.send('file:drag', String(file)),
+  copyImage: (file) => ipcRenderer.invoke('file:copy-image', String(file)),
 });

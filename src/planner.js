@@ -24,6 +24,9 @@ export const StrategyShape = z.object({
   days: z.array(z.number().int().min(1).max(7)).max(7).default([1, 3, 5]),
   times: z.array(z.string().regex(/^\d{2}:\d{2}$/)).min(1).max(6).default(['10:00']),
   platforms: z.array(z.string()).max(10).default(['instagram']),
+  // Autopilot: when Content Chef makes each planned post (design + captions) by itself.
+  // 'on-the-day' = from midnight on the post's day, 'day-before' = 24h ahead (time to review), 'off' = only when asked.
+  autopilot: z.enum(['off', 'day-before', 'on-the-day']).default('on-the-day'),
 });
 export const Strategy = StrategyShape.transform((x) => ({ ...x, days: [...new Set(x.days)].sort(), times: [...new Set(x.times)].sort() }));
 export const Post = z.object({
@@ -39,6 +42,11 @@ export const Post = z.object({
   caption: z.string().max(5000).default(''),
   notes: z.string().max(2000).default(''),
   reminded: z.boolean().optional(),
+  // Filled in when the post is made: the on-image copy, per-platform captions and the rendered files.
+  content: z.record(z.string(), z.any()).optional(),
+  captions: z.record(z.string(), z.string()).optional(),
+  assets: z.array(z.object({ platform: z.string(), format: z.string(), kind: z.string().default('image'), file: z.string(), path: z.string(), width: z.number().optional(), height: z.number().optional() })).max(40).optional(),
+  auto: z.object({ state: z.enum(['queued', 'making', 'done', 'error']), at: z.number(), error: z.string().max(500).optional(), step: z.string().max(200).optional() }).optional(),
 });
 
 export async function getPlanner(brand) {
@@ -50,7 +58,25 @@ export async function getPlanner(brand) {
   }
 }
 
-export async function savePlanner(brand, { strategy, posts }) {
+// Writes are serialised, so the autopilot updating a post and the user editing never lose each other's changes.
+let writes = Promise.resolve();
+const serial = (fn) => { const run = writes.catch(() => {}).then(fn); writes = run; return run; };
+
+export function savePlanner(brand, input) {
+  return serial(async () => {
+    // A save from the Planner page may carry a post from before the autopilot finished it: keep the newer result.
+    if (input?.posts) {
+      const cur = new Map((await getPlanner(brand)).posts.map((p) => [p.id, p]));
+      input = { ...input, posts: input.posts.map((p) => {
+        const c = cur.get(p.id);
+        if (!c?.auto || (p.auto?.at ?? 0) >= c.auto.at) return p;
+        return { ...p, auto: c.auto, assets: c.assets, content: c.content, captions: c.captions, caption: p.caption || c.caption, status: c.auto.state === 'done' && p.status === 'idea' ? c.status : p.status };
+      }) };
+    }
+    return writePlanner(brand, input);
+  });
+}
+async function writePlanner(brand, { strategy, posts }) {
   await loadBrand(brand); // must exist
   const cur = await getPlanner(brand);
   const next = {
@@ -67,12 +93,14 @@ export async function savePlanner(brand, { strategy, posts }) {
 }
 
 /** Add or update posts by id (and optionally delete some), keeping everything else. */
-export async function upsertPosts(brand, { posts = [], remove = [], strategy } = {}) {
-  const cur = await getPlanner(brand);
-  const byId = new Map(cur.posts.map((p) => [p.id, p]));
-  for (const p of posts) byId.set(p.id ?? randomUUID(), Post.parse({ ...(p.id ? byId.get(p.id) : {}), ...p }));
-  for (const id of remove) byId.delete(id);
-  return savePlanner(brand, { strategy: strategy ? { ...cur.strategy, ...strategy } : cur.strategy, posts: [...byId.values()] });
+export function upsertPosts(brand, { posts = [], remove = [], strategy } = {}) {
+  return serial(async () => {
+    const cur = await getPlanner(brand);
+    const byId = new Map(cur.posts.map((p) => [p.id, p]));
+    for (const p of posts) byId.set(p.id ?? randomUUID(), Post.parse({ ...(p.id ? byId.get(p.id) : {}), ...p }));
+    for (const id of remove) byId.delete(id);
+    return writePlanner(brand, { strategy: strategy ? { ...cur.strategy, ...strategy } : cur.strategy, posts: [...byId.values()] });
+  });
 }
 
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

@@ -86,7 +86,13 @@ function pillarMix(s, posts) {
 const neediestPillar = (s, posts) => pillarMix(s, posts).sort((a, b) => a.n - b.n)[0]?.name ?? '';
 
 /** "Your plan": what the calendar is working towards, in a few readable lines. Editing opens PlanSetup. */
-function PlanCard({ s, posts, colour, platforms, onEdit, onFill, canFill, assistant }) {
+const AUTOPILOT = [
+  { value: 'on-the-day', label: 'On the day', hint: 'Each post is made on the morning it goes out' },
+  { value: 'day-before', label: 'Day before', hint: 'Made 24 hours ahead, so you can check it first' },
+  { value: 'off', label: 'Off', hint: 'Only when you press "Make it"' },
+];
+
+function PlanCard({ s, posts, colour, platforms, onEdit, onFill, canFill, assistant, onAutopilot, onMakeWeek }) {
   const cov = coverage(s, posts);
   const mix = pillarMix(s, posts);
   const max = Math.max(1, ...mix.map((m) => m.n));
@@ -112,6 +118,12 @@ function PlanCard({ s, posts, colour, platforms, onEdit, onFill, canFill, assist
         <div class="row between small"><b>Next 2 weeks</b><span class="muted">${cov.filled} of ${cov.total} slots planned</span></div>
         <div class="pl-bar"><i style=${{ width: `${cov.total ? (cov.filled / cov.total) * 100 : 0}%` }}></i></div>
         ${cov.open > 0 && html`<button class="btn small soft wide" disabled=${!canFill} title=${canFill ? '' : 'Connect an assistant in Settings first'} onClick=${onFill}><${Icon} name="sparkles" size=${13} /> Fill ${plural(cov.open, 'open slot')} with ${assistant}</button>`}
+      </div>
+      <div class="pl-auto">
+        <div class="row between small"><b><${Icon} name="bolt" size=${13} /> Autopilot</b><span class="muted">${plural(posts.filter((p) => p.assets?.length && p.status !== 'posted').length, 'post')} ready</span></div>
+        <${Segmented} value=${s.autopilot ?? 'on-the-day'} onChange=${onAutopilot} options=${AUTOPILOT.map(({ value, label }) => ({ value, label }))} />
+        <p class="hint">${AUTOPILOT.find((a) => a.value === (s.autopilot ?? 'on-the-day')).hint}: copy, the design at each platform's size, and captions, ready to post. Runs while Content Chef is open.</p>
+        <button class="btn small wide" onClick=${onMakeWeek}><${Icon} name="sparkles" size=${13} /> Make the next 7 days now</button>
       </div>
       ${mix.length > 0 && html`
         <div class="pl-mix">
@@ -157,7 +169,8 @@ function NextUp({ posts, onAct, onOpen, colour }) {
   const list = posts.filter((p) => p.date && p.status !== 'posted' && p.date >= addDays(today(), -14))
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).slice(0, 4);
   if (!list.length) return null;
-  const ACTION = { idea: 'Create it', draft: 'Mark ready', ready: 'Post it' };
+  const ACTION = { idea: 'Make it', draft: 'Mark ready', ready: 'Post it' };
+  const label = (p) => (p.auto?.state === 'error' ? 'Try again' : p.auto?.state === 'queued' ? 'Queued' : p.auto?.state === 'making' ? 'Making…' : ACTION[p.status]);
   const when = (p) => {
     const d = p.date === today() ? 'Today' : p.date === addDays(today(), 1) ? 'Tomorrow' : new Date(`${p.date}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
     return `${d} · ${fmtTime(p.time)}`;
@@ -167,12 +180,13 @@ function NextUp({ posts, onAct, onOpen, colour }) {
       ${list.map((p) => {
         const late = `${p.date} ${p.time}` < now;
         return html`<div class="pl-nu st-${p.status} ${late ? 'late' : ''}" key=${p.id}>
+          ${p.assets?.[0] && html`<button type="button" class="pl-nu-thumb" onClick=${() => onOpen(p)}>${p.assets[0].kind === 'video' ? html`<video src=${assetUrl(p.assets[0])} muted></video>` : html`<img src=${assetUrl(p.assets[0])} alt="" />`}</button>`}
           <button type="button" class="pl-nu-body" onClick=${() => onOpen(p)}>
             <small>${late ? 'Overdue · ' : ''}${when(p)}</small>
             <b class="ellipsis">${plain(p.headline) || 'Untitled post'}</b>
-            <span class="muted small"><i style=${{ background: colour(p.pillar) }}></i>${STATUS[p.status].label} · ${FORMAT[p.format]}</span>
+            <span class="muted small"><i style=${{ background: colour(p.pillar) }}></i>${p.auto?.state === 'making' ? (p.auto.step || 'Making') : p.auto?.state === 'error' ? "Couldn't make it" : STATUS[p.status].label} · ${FORMAT[p.format]}</span>
           </button>
-          <button type="button" class="btn small ${p.status === 'ready' ? 'primary' : 'soft'}" onClick=${() => onAct(p)}>${ACTION[p.status]}</button>
+          <button type="button" class="btn small ${p.status === 'ready' ? 'primary' : 'soft'}" disabled=${['queued', 'making'].includes(p.auto?.state)} onClick=${() => onAct(p)}>${['queued', 'making'].includes(p.auto?.state) ? html`<span class="spin"></span> ` : ''}${label(p)}</button>
         </div>`;
       })}
     </div>`;
@@ -237,6 +251,14 @@ export function PlannerPage() {
       try { const saved = await api('PUT', `/api/planner/${brand.id}`, { strategy: next.strategy, posts: next.posts }); lastSaved.current = saved.updatedAt; } catch (e) { toast(e.message, 'err'); }
     }, 300);
   };
+  // A reminder ("time to post") opens that post's posting kit.
+  useEffect(() => {
+    const open = (e) => { const p = plan?.posts.find((x) => x.id === e.detail); if (p) setEditing({ ...p }); };
+    addEventListener('chef:open-post', open);
+    const pendingId = store.get('planner.openPost', null);
+    if (pendingId && plan) { store.set('planner.openPost', null); open({ detail: pendingId }); }
+    return () => removeEventListener('chef:open-post', open);
+  }, [plan]);
   if (!plan) return html`<div class="page"><div class="page-inner"><p class="muted">Loading planner…</p></div></div>`;
 
   const s = plan.strategy;
@@ -255,8 +277,10 @@ export function PlannerPage() {
       navigator.clipboard?.writeText([post.headline, post.brief].filter(Boolean).join('\n')).catch(() => {});
       toast('Carousel mode is open: press "Build from a brief" and paste the brief (copied for you).');
     } else {
-      setPending({ brand: brand.id, design: { ...base, mode: 'single', variants: [], content: { ...(base.content ?? {}), headline: post.headline || base.content?.headline, eyebrow: post.pillar || base.content?.eyebrow }, captions, campaign: plain(post.headline).slice(0, 40) || 'post' } });
-      toast('Opened in the builder with the headline and caption filled in.');
+      // A post the autopilot already made opens with its exact copy, layout, colours and sizes.
+      const made = post.content ? { content: { ...(base.content ?? {}), ...post.content }, ...(post.content.template ? { templates: [post.content.template] } : {}), ...(post.content.palette ? { palettes: [post.content.palette] } : {}), ...(post.assets?.length ? { formats: [...new Set(post.assets.map((a) => a.format))] } : {}) } : null;
+      setPending({ brand: brand.id, design: { ...base, mode: 'single', variants: [], ...(made ?? { content: { ...(base.content ?? {}), headline: post.headline || base.content?.headline, eyebrow: post.pillar || base.content?.eyebrow } }), captions: post.captions ?? captions, campaign: plain(post.headline).slice(0, 40) || 'post' } });
+      toast(made ? 'Opened in the builder: change anything, then export.' : 'Opened in the builder with the headline and caption filled in.');
     }
     if (post.status === 'idea') upsert({ ...post, status: 'draft' });
     pickBrand(brand.id);
@@ -268,9 +292,25 @@ export function PlannerPage() {
   const byDate = (d) => plan.posts.filter((p) => p.date === d).sort((a, b) => a.time.localeCompare(b.time));
   const unscheduled = plan.posts.filter((p) => !p.date);
   const counts = Object.fromEntries(Object.keys(STATUS).map((k) => [k, plan.posts.filter((p) => p.status === k).length]));
-  // The one button on each "Next up" post: idea → builder, draft → ready, ready → the posting kit.
+  // Make a post now: save any edits first, then queue it for the autopilot.
+  const makeNow = async (post) => {
+    const next = { ...plan, posts: plan.posts.some((p) => p.id === post.id) ? plan.posts.map((p) => (p.id === post.id ? post : p)) : [...plan.posts, post] };
+    setPlan(next);
+    clearTimeout(saveTimer.current);
+    try {
+      await api('PUT', `/api/planner/${brand.id}`, { strategy: next.strategy, posts: next.posts });
+      await api('POST', `/api/planner/${brand.id}/make`, { ids: [post.id] });
+      toast('Making it: copy, design at every size, captions. It takes about a minute.');
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  const makeWeek = async () => {
+    try { const r = await api('POST', `/api/planner/${brand.id}/make`, { days: 7 }); toast(r.queued ? `Making ${plural(r.queued, 'post')}. They'll appear as they're done.` : 'Nothing left to make in the next 7 days'); }
+    catch (e) { toast(e.message, 'err'); }
+  };
+  // The one button on each "Next up" post: idea → make it, draft → ready, ready → the posting kit.
   const act = (p) => {
-    if (p.status === 'idea') openInBuilder(p);
+    if (p.auto?.state === 'error' || (p.status === 'idea' && !['queued', 'making'].includes(p.auto?.state))) makeNow(p);
+    else if (p.status === 'idea') setEditing({ ...p });
     else if (p.status === 'draft') { upsert({ ...p, status: 'ready' }); toast('Marked ready: it will be waiting for you on the day'); }
     else setEditing({ ...p });
   };
@@ -289,8 +329,9 @@ export function PlannerPage() {
     <button type="button" class="pl-card-post st-${p.status}" key=${p.id} draggable="true" onDragStart=${(e) => e.dataTransfer.setData('text/plain', p.id)}
       onClick=${(e) => { e.stopPropagation(); setEditing({ ...p }); }}>
       <span class="pl-cp-top"><i style=${{ background: colour(p.pillar) }}></i>${STATUS[p.status].label}<small>${FORMAT[p.format]}</small></span>
+      ${p.assets?.[0] && p.assets[0].kind !== 'video' && html`<img class="pl-cp-thumb" src=${assetUrl(p.assets[0])} alt="" />`}
       <b>${plain(p.headline) || 'Untitled post'}</b>
-      <small class="muted ellipsis">${p.platforms.map((k) => k[0].toUpperCase() + k.slice(1)).join(' · ')}</small>
+      <small class="muted ellipsis">${['queued', 'making'].includes(p.auto?.state) ? 'Making…' : p.platforms.map((k) => k[0].toUpperCase() + k.slice(1)).join(' · ')}</small>
     </button>`;
   const chip = (p) => html`
     <button type="button" class="pl-chip st-${p.status}" key=${p.id} draggable="true" onDragStart=${(e) => e.dataTransfer.setData('text/plain', p.id)}
@@ -315,7 +356,8 @@ export function PlannerPage() {
       <div class="pl-layout">
         <aside class="pl-side">
           <${PlanCard} s=${s} posts=${plan.posts} colour=${colour} platforms=${meta.platforms} assistant=${assistantName(settings)}
-            canFill=${assistantReady(settings)} onEdit=${() => setSetup(true)} onFill=${() => setPlanning(true)} />
+            canFill=${assistantReady(settings)} onEdit=${() => setSetup(true)} onFill=${() => setPlanning(true)}
+            onAutopilot=${(autopilot) => setStrategy({ autopilot })} onMakeWeek=${makeWeek} />
 
           ${unscheduled.length > 0 && html`
             <section class="card pl-card" onDragOver=${(e) => e.preventDefault()} onDrop=${(e) => move(e.dataTransfer.getData('text/plain'), null)}>
@@ -373,6 +415,7 @@ export function PlannerPage() {
         onClose=${() => setEditing(null)}
         onSave=${(p) => { upsert(p); setEditing(null); }}
         onDelete=${(id) => { remove(id); setEditing(null); }}
+        live=${plan.posts.find((x) => x.id === editing.id)} onMake=${makeNow}
         onOpen=${(p) => { upsert(p); setEditing(null); openInBuilder(p); }} />`}
       ${setup && html`<${PlanSetup} s=${s} platforms=${meta.platforms} assistant=${assistantName(settings)} onClose=${() => setSetup(false)}
         onSave=${(next) => { setStrategy(next); setSetup(false); toast('Plan saved'); }} />`}
@@ -399,8 +442,84 @@ function publishTo(platform, post) {
   toast(COMPOSE[platform] && !['x', 'linkedin'].includes(platform) ? 'Caption copied: paste it into the post' : 'Opening the composer…');
 }
 
-function PostEditor({ post, strategy, colour, platforms, brand, onClose, onSave, onDelete, onOpen }) {
+const assetUrl = (a) => `/output/${a.file.split('/').map(encodeURIComponent).join('/')}`;
+const PREFILLS = ['x', 'linkedin']; // composers that take the caption in the link
+const PLATFORM_NAME = { instagram: 'Instagram', facebook: 'Facebook', x: 'X', linkedin: 'LinkedIn', tiktok: 'TikTok', pinterest: 'Pinterest', youtube: 'YouTube' };
+
+/** Put a finished image on the clipboard (desktop: native; browser: async clipboard). */
+async function copyImage(a) {
+  if (a.kind === 'video') return false;
+  if (window.desktop?.copyImage) return window.desktop.copyImage(a.file);
+  try {
+    const blob = await (await fetch(assetUrl(a))).blob();
+    const png = blob.type === 'image/png' ? blob : await new Promise((res) => { const img = new Image(); img.onload = () => { const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight; c.getContext('2d').drawImage(img, 0, 0); c.toBlob(res, 'image/png'); }; img.src = URL.createObjectURL(blob); });
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * The posting kit: for each platform, the finished image (drag it into the post, or it's already on
+ * your clipboard), the caption written for that platform, and the platform's composer opened for you,
+ * with the caption filled in where the platform allows it.
+ */
+function PostKit({ p, onPosted }) {
+  const byPlatform = {};
+  for (const a of p.assets ?? []) (byPlatform[a.platform] ??= []).push(a);
+  const [done, setDone] = useState({});
+  const go = async (platform) => {
+    const files = byPlatform[platform];
+    const caption = p.captions?.[platform] || p.caption || plain(p.headline);
+    const copied = files.length === 1 ? await copyImage(files[0]) : false;
+    const url = COMPOSE[platform]?.(caption);
+    if (!PREFILLS.includes(platform) && !copied) navigator.clipboard?.writeText(caption).catch(() => {});
+    if (url) window.open(url, '_blank', 'noopener');
+    setDone((d) => ({ ...d, [platform]: true }));
+    toast(copied
+      ? `${PLATFORM_NAME[platform]} is opening. Image copied: press Ctrl+V in the post${PREFILLS.includes(platform) ? ' (the caption is already filled in)' : ', then use "Copy caption"'}.`
+      : `${PLATFORM_NAME[platform]} is opening. Drag the ${files.length > 1 ? 'slides' : 'file'} from here into the post${PREFILLS.includes(platform) ? '' : '; the caption is copied'}.`);
+  };
+  const drag = (e, a) => { if (window.desktop?.dragFile) { e.preventDefault(); window.desktop.dragFile(a.file); } else e.dataTransfer.setData('DownloadURL', `${a.kind === 'video' ? 'video/mp4' : 'image/png'}:${a.file.split('/').pop()}:${location.origin}${assetUrl(a)}`); };
+  return html`
+    <div class="pl-kit">
+      <div class="row between"><b>Post it</b><span class="muted small">Drag the image into the post, or press the button: it copies the image and opens the app</span></div>
+      ${Object.entries(byPlatform).map(([platform, files]) => html`
+        <div class="pl-kit-row ${done[platform] ? 'done' : ''}" key=${platform}>
+          <div class="pl-kit-media">${files.slice(0, 5).map((a) => a.kind === 'video'
+            ? html`<video src=${assetUrl(a)} muted loop autoplay playsinline draggable="true" onDragStart=${(e) => drag(e, a)} title="Drag into the post"></video>`
+            : html`<img src=${assetUrl(a)} alt="" draggable="true" onDragStart=${(e) => drag(e, a)} title="Drag into the post" />`)}
+            ${files.length > 5 && html`<span class="more">+${files.length - 5}</span>`}</div>
+          <div class="pl-kit-text">
+            <b>${PLATFORM_NAME[platform] ?? platform}</b>
+            <small class="muted">${files.length > 1 ? `${files.length} slides` : `${files[0].width ?? ''}×${files[0].height ?? ''}`} · ${(p.captions?.[platform] || p.caption || '').slice(0, 90)}${(p.captions?.[platform] || p.caption || '').length > 90 ? '…' : ''}</small>
+            <div class="row">
+              <button type="button" class="btn small primary" onClick=${() => go(platform)}>${done[platform] ? 'Open again' : `Post on ${PLATFORM_NAME[platform] ?? platform}`} ↗</button>
+              <button type="button" class="btn small" onClick=${() => navigator.clipboard.writeText(p.captions?.[platform] || p.caption || '').then(() => toast('Caption copied'))}>Copy caption</button>
+              <a class="btn small ghost" href=${assetUrl(files[0])} download>Download</a>
+            </div>
+          </div>
+        </div>`)}
+      <button type="button" class="btn soft wide" onClick=${onPosted}>✓ I've posted it</button>
+    </div>`;
+}
+
+/** Shown while the autopilot is working on a post, or when it couldn't. */
+function MakingNote({ auto }) {
+  if (!auto) return null;
+  if (auto.state === 'queued') return html`<p class="pl-making"><span class="spin"></span> Waiting its turn to be made…</p>`;
+  if (auto.state === 'making') return html`<p class="pl-making"><span class="spin"></span> ${auto.step || 'Making it'}…</p>`;
+  if (auto.state === 'error') return html`<p class="pl-making err">Couldn't make it: ${auto.error}</p>`;
+  if (auto.step) return html`<p class="hint">${auto.step}</p>`;
+  return null;
+}
+
+function PostEditor({ post, live, strategy, colour, platforms, brand, onClose, onSave, onDelete, onOpen, onMake }) {
   const [p, setP] = useState(post);
+  // The autopilot may finish this post while it's open: take its results without losing your edits.
+  useEffect(() => {
+    if (live?.auto && live.auto.at !== p.auto?.at) setP((x) => ({ ...x, auto: live.auto, assets: live.assets, content: live.content, captions: live.captions, caption: x.caption || live.caption, status: live.auto.state === 'done' && x.status === 'idea' ? live.status : x.status }));
+  }, [live?.auto?.at, live?.auto?.state]);
+  const making = ['queued', 'making'].includes(p.auto?.state);
   const [busy, setBusy] = useState(false);
   const set = (patch) => setP((x) => ({ ...x, ...patch }));
   const st = STATUS[p.status];
@@ -416,7 +535,9 @@ function PostEditor({ post, strategy, colour, platforms, brand, onClose, onSave,
   return html`
     <${Modal} title=${post.headline ? 'Planned post' : 'New post'} onClose=${onClose}>
       <div class="pl-flow">${Object.entries(STATUS).map(([k, v]) => html`<button type="button" class="${p.status === k ? 'on' : ''} st-${k}" onClick=${() => set({ status: k })}>${v.icon} ${v.label}</button>`)}</div>
-      <p class="hint pl-next">Next step: <b>${st.hint}</b></p>
+      <p class="hint pl-next">Next step: <b>${p.assets?.length && p.status !== 'posted' ? 'Post it (below)' : st.hint}</b></p>
+      <${MakingNote} auto=${p.auto} />
+      ${p.assets?.length > 0 && p.status !== 'posted' && html`<${PostKit} p=${p} onPosted=${() => { onSave({ ...p, status: 'posted' }); toast('Marked as posted'); }} />`}
       <div class="two">
         <${Field} label="Date"><input type="date" value=${p.date ?? ''} onInput=${(e) => set({ date: e.target.value || null })} /><//>
         <${Field} label="Time"><input type="time" value=${p.time} onInput=${(e) => set({ time: e.target.value || '10:00' })} /><//>
@@ -438,13 +559,12 @@ function PostEditor({ post, strategy, colour, platforms, brand, onClose, onSave,
         <textarea rows="4" value=${p.caption} onInput=${(e) => set({ caption: e.target.value })}></textarea>
       <//>
       <${Field} label="Notes"><input value=${p.notes} placeholder="Photo to use, offer details, who's posting…" onInput=${(e) => set({ notes: e.target.value })} /><//>
-      ${(p.status === 'ready' || p.status === 'draft') && (p.platforms.length > 0) && html`
+      ${!p.assets?.length && (p.status === 'ready' || p.status === 'draft') && (p.platforms.length > 0) && html`
         <div class="pl-publish">
           <div class="row between"><b>Post it</b><span class="muted small">Copies the caption, then opens each app's composer</span></div>
           <div class="pl-pub-row">${p.platforms.map((k) => html`
             <button type="button" class="pl-pub" key=${k} onClick=${() => publishTo(k, p)}>${platforms[k]?.label ?? k} ↗</button>`)}</div>
           <button type="button" class="btn small soft wide" onClick=${() => { set({ status: 'posted' }); onSave({ ...p, status: 'posted' }); toast('Marked as posted'); }}>✓ I've posted it</button>
-          <p class="hint">Automatic publishing (no clicks) needs your accounts connected through each platform's API. It's on the roadmap.</p>
         </div>`}
       <div class="row between">
         <div class="row">
@@ -452,7 +572,9 @@ function PostEditor({ post, strategy, colour, platforms, brand, onClose, onSave,
           ${p.caption && html`<button class="btn small" onClick=${() => navigator.clipboard.writeText(p.caption).then(() => toast('Caption copied'))}>Copy caption</button>`}
         </div>
         <div class="row">
-          ${p.status !== 'posted' && html`<button class="btn" onClick=${() => onOpen(p)}><${Icon} name="sparkles" size=${14} /> ${p.format === 'video' ? 'Open Video' : 'Open in builder'}</button>`}
+          ${p.status !== 'posted' && html`<button class="btn" onClick=${() => onOpen(p)} title="Open it in the builder to change the design yourself">${p.format === 'video' ? 'Open Video' : 'Open in builder'}</button>`}
+          ${p.status !== 'posted' && p.date && html`<button class="btn" disabled=${making} onClick=${() => onMake(p)} title="Content Chef writes the copy, designs it at each platform's size and writes the captions">
+            <${Icon} name="sparkles" size=${14} /> ${making ? 'Making…' : p.assets?.length ? 'Make it again' : 'Make it now'}</button>`}
           <button class="btn primary" onClick=${() => onSave(p)}>Save</button>
         </div>
       </div>
@@ -516,10 +638,11 @@ export function PlannerReminders() {
       if (!due.length) return;
       for (const x of due) {
         const title = `Time to post: ${plain(x.headline) || 'your planned post'}`;
+        const body = x.assets?.length ? 'Made and ready: click to open the posting kit.' : x.caption ? 'Caption is ready in the Planner.' : x.brief;
         toast(`📣 ${title}`);
         try {
           if (Notification.permission === 'default') await Notification.requestPermission();
-          if (Notification.permission === 'granted') { const n = new Notification(title, { body: x.caption ? 'Caption is ready in the Planner.' : x.brief }); n.onclick = () => { window.focus(); setTab('planner'); }; }
+          if (Notification.permission === 'granted') { const n = new Notification(title, { body }); n.onclick = () => { window.focus(); store.set('planner.openPost', x.id); setTab('planner'); dispatchEvent(new CustomEvent('chef:open-post', { detail: x.id })); }; }
         } catch { /* notifications unavailable */ }
       }
       await api('PUT', `/api/planner/${brand.id}`, { strategy: p.strategy, posts: p.posts.map((x) => (due.some((d) => d.id === x.id) ? { ...x, reminded: true } : x)) }).catch(() => {});

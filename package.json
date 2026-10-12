@@ -1,6 +1,6 @@
 {
   "name": "content-chef",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Brand-aware content studio: design ads and value posts once, export every size as PNG/JPG/MP4. Desktop app, CLI, and an MCP connector for ChatGPT, Codex and Claude.",
   "type": "module",
@@ -15,7 +15,7 @@
     "brands": "node src/cli.js brands",
     "formats": "node src/cli.js formats",
     "setup": "npx playwright install chromium",
-    "test": "node --test tests/core.test.js tests/codex.test.js tests/settings.test.js tests/brand-import.test.js tests/mcp.test.js tests/updater.test.js tests/images.test.js tests/carousels.test.js tests/google-calendar.test.js",
+    "test": "node --test tests/core.test.js tests/codex.test.js tests/settings.test.js tests/brand-import.test.js tests/mcp.test.js tests/updater.test.js tests/images.test.js tests/carousels.test.js tests/google-calendar.test.js tests/autopilot.test.js",
     "desktop": "electron .",
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --win --publish never",

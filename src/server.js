@@ -24,6 +24,7 @@ import { createBrand } from './core/brands.js';
 import { imageStatus, prepareBackground, generateBackground } from './background-images.js';
 import { connectHiggsfield, finishHiggsfield, disconnectHiggsfield, higgsfieldModels } from './higgsfield.js';
 import { getPlanner, savePlanner, planContent, plannerIcs, PLANNER_DIR } from './planner.js';
+import { queueMake, duePosts, autopilotTick, recoverInterrupted } from './autopilot.js';
 import { googleStatus, saveGoogleClient, connectGoogle, finishGoogle, disconnectGoogle, syncBrand, scheduleGoogleSync } from './google-calendar.js';
 import { listCarousels, loadCarousel, createCarousel, saveCarouselSlide, refineCarouselSlide, exportCarousel, saveCarouselDesign, generateCarouselDesign } from './carousels.js';
 
@@ -105,6 +106,11 @@ app.put('/api/planner/:brand', api((req) => savePlanner(req.params.brand, req.bo
 app.post('/api/planner/:brand/plan', api(async (req, res) => {
   const controller = new AbortController(); res.on('close', () => controller.abort());
   return planContent(req.params.brand, req.body, { signal: controller.signal });
+}));
+// Make posts now: specific ones ({ ids }), or everything planned in the next `days` days.
+app.post('/api/planner/:brand/make', api(async (req) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : await duePosts(req.params.brand, { days: Math.min(31, Math.max(1, Number(req.body?.days) || 7)) });
+  return queueMake(req.params.brand, ids);
 }));
 app.get('/api/planner/:brand/calendar.ics', async (req, res) => {
   try {
@@ -456,8 +462,16 @@ app.post('/api/copy', async (req, res) => {
  * uploads and store settings (incl. an API key), so it must not be reachable from the network.
  * Set HOST=0.0.0.0 only if you understand that. Port 0 picks a free port (used by the desktop app).
  */
+let autopilotTimer;
 export function startServer({ port = PORT, host = process.env.HOST ?? '127.0.0.1' } = {}) {
   ensureWorkspace();
+  // Planner autopilot: make posts as they come due (checked every few minutes while the app is open).
+  if (!autopilotTimer) {
+    recoverInterrupted().catch(() => {});
+    setTimeout(() => autopilotTick().catch(() => {}), 15_000).unref();
+    autopilotTimer = setInterval(() => autopilotTick().catch(() => {}), 5 * 60_000);
+    autopilotTimer.unref();
+  }
   return new Promise((resolve, reject) => {
     const server = app.listen(port, host, () => resolve({ server, port: server.address().port }));
     server.on('error', reject);

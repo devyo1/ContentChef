@@ -920,3 +920,23 @@ textarea.paste{font-family:var(--mono);font-size:12.5px;margin:10px 0}
 .gcal-setup{margin-top:10px}
 .gcal-setup summary{cursor:pointer;font-weight:600;font-size:13px}
 .gcal-setup ol{padding-left:18px;display:grid;gap:4px;margin:10px 0}
+/* Planner autopilot + posting kit */
+.pl-auto{display:grid;gap:8px;padding-top:12px;margin-top:12px;border-top:1px solid var(--line)}
+.pl-auto b{display:inline-flex;align-items:center;gap:5px}
+.pl-auto .hint{margin:0}
+.pl-making{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:var(--r-sm);background:var(--accent-soft);color:var(--accent-ink);font-size:13px;font-weight:600;margin:6px 0 12px}
+.pl-making.err{background:var(--err-soft);color:var(--err)}
+.pl-nu-thumb{flex:none;width:46px;height:46px;padding:0;border:0;border-radius:8px;overflow:hidden;cursor:pointer;background:var(--surface-3)}
+.pl-nu-thumb img,.pl-nu-thumb video{width:100%;height:100%;object-fit:cover;display:block}
+.pl-cp-thumb{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;margin:4px 0 2px;display:block}
+.pl-kit{display:grid;gap:10px;padding:14px;border-radius:var(--r);background:var(--surface-2);border:1px solid var(--line);margin:4px 0 14px}
+.pl-kit-row{display:flex;gap:12px;align-items:center;padding:10px;border-radius:var(--r-sm);background:var(--surface-solid);border:1px solid var(--line);transition:border-color .2s}
+.pl-kit-row.done{border-color:var(--ok)}
+.pl-kit-media{display:flex;gap:4px;flex:none;align-items:center}
+.pl-kit-media img,.pl-kit-media video{height:84px;width:auto;max-width:120px;border-radius:6px;object-fit:cover;cursor:grab;box-shadow:var(--shadow-sm);background:var(--surface-3)}
+.pl-kit-media img:active,.pl-kit-media video:active{cursor:grabbing}
+.pl-kit-media .more{font-size:12px;color:var(--text-3);padding:0 4px}
+.pl-kit-text{display:grid;gap:6px;min-width:0;flex:1}
+.pl-kit-text small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl-kit-text .row{flex-wrap:wrap;gap:6px}
+.pl-making .spin,.pl-nu .spin,.planner .btn .spin{display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px;flex:none}
